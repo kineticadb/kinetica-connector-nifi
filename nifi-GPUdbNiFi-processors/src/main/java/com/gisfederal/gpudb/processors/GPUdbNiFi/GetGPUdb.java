@@ -5,10 +5,8 @@ import com.gpudb.Type;
 import com.gpudb.GPUdb;
 import com.gpudb.GPUdbException;
 import com.gpudb.protocol.CreateTableMonitorResponse;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -68,15 +66,7 @@ public class GetGPUdb extends AbstractProcessor {
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
-    
-    public static final PropertyDescriptor PROP_DELIMITER = new PropertyDescriptor.Builder()
-            .name("Delimiter")
-            .description("Delimiter of input data (usually a ',' or '\t' (tab); defaults to '\t' (tab))")
-            .required(false)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .defaultValue("\t")
-            .build();
-    
+
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
             .name("success")
             .description("All CSV files from the GPUdb set are routed to this relationship")
@@ -89,15 +79,13 @@ public class GetGPUdb extends AbstractProcessor {
     private ConcurrentLinkedQueue<GenericRecord> queue;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
-    private char delimiter;
-    
+
     @Override
     protected void init(final ProcessorInitializationContext context) {
         final List<PropertyDescriptor> descriptors = new ArrayList<>();
         descriptors.add(PROP_SERVER);
         descriptors.add(PROP_SET);
         descriptors.add(PROP_OBJECT_MONITOR);
-        descriptors.add(PROP_DELIMITER);        
         this.descriptors = Collections.unmodifiableList(descriptors);
 
         final Set<Relationship> relationships = new HashSet<>();
@@ -120,7 +108,7 @@ public class GetGPUdb extends AbstractProcessor {
 
         gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue());
         set = context.getProperty(PROP_SET).getValue();
-        delimiter = context.getProperty(PROP_DELIMITER).getValue().charAt(0);
+
         objectType = Type.fromTable(gpudb, set);
         queue = new ConcurrentLinkedQueue<>();
 
@@ -199,9 +187,8 @@ public class GetGPUdb extends AbstractProcessor {
         flowFile = session.write(flowFile, new OutputStreamCallback() {
             @Override
             public void process(OutputStream out) throws IOException {
-               try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out))) {
-                CSVPrinter printer = new CSVPrinter(writer, CSVFormat.RFC4180.withDelimiter(delimiter));
-                       
+                PrintStream printStream = new PrintStream(out, false, "UTF-8");
+                CSVPrinter printer = new CSVPrinter(printStream, CSVFormat.RFC4180);
                 ArrayList<String> fields = new ArrayList<>();
 
                 for (Type.Column attribute : objectType.getColumns()) {
@@ -222,7 +209,11 @@ public class GetGPUdb extends AbstractProcessor {
                     for (String annotation : attribute.getProperties()) {
                         field += "|" + annotation;
                     }
-
+/*
+                    if (attribute.getPrimaryKey() >= 0) {
+                        field += "|$primary_key(" + attribute.getPrimaryKey() + ")";
+                    }
+*/
                     fields.add(field);
                 }
 
@@ -241,11 +232,9 @@ public class GetGPUdb extends AbstractProcessor {
                 }
 
                 printer.flush();
-                writer.flush();
+                printStream.flush();
                 out.flush();
                 getLogger().info("Got {} record(s) from set {} at {}.", new Object[] { count, set, gpudb.getURL() });
-                
-               }
             }
         });
 

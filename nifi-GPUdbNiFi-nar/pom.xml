@@ -3,17 +3,17 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.gpudb</groupId>
-        <artifactId>GPUdbNiFiConnector</artifactId>
-        <version>5.1.0.0</version>
+        <artifactId>ToGPUdb</artifactId>
+        <version>1.1-SNAPSHOT</version>
     </parent>
     <artifactId>nifi-GPUdbNiFi-nar</artifactId>
-    <version>5.1.0.0</version>
+    <version>1.1-SNAPSHOT</version>
     <packaging>nar</packaging>
     <dependencies>
         <dependency>
             <groupId>com.gpudb</groupId>
             <artifactId>nifi-GPUdbNiFi-processors</artifactId>
-            <version>5.1.0.0</version>
+            <version>1.1-SNAPSHOT</version>
         </dependency>
     </dependencies>
 </project>

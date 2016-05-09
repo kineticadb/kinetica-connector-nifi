@@ -8,6 +8,7 @@ import com.gpudb.Type;
 import com.gpudb.Type.Column;
 import com.gpudb.protocol.CreateTableRequest;
 import com.gpudb.protocol.HasTableResponse;
+//import com.gisfederal.gpudb.GetSetPropertiesResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -410,12 +411,14 @@ public class PutGPUdb extends AbstractProcessor {
                         objects.add(object);
                         count++;
                         if (objects.size() == 1000) {
+                            //gpudb.insertRecords(set, objects, GPUdb.options("update_on_existing_pk", "true"));
                             gpudb.insertRecords(set, objects, null);
                             objects.clear();
                         }
                     }
 
                     if (objects.size() > 0) {
+                        //gpudb.insertRecords(set, objects, GPUdb.options("update_on_existing_pk", "true"));
                         gpudb.insertRecords(set, objects, null);
                     }
 
