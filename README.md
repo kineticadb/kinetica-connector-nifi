@@ -1,5 +1,12 @@
 This project is aimed to make GPUdb both a data source and data sink for NiFi.
 
+The documentation can be found at http://www.gpudb.com/docs/5.2/index.html. The connector specific documentation can be found at:
+
+*   www.gpudb.com/docs/5.2/connectors/nifi_guide.html
+
+For changes to the connector API, please refer to CHANGELOG.md.  For changes
+to GPUdb functions, please refer to CHANGELOG-FUNCTIONS.md.
+
 
 ==================================================
 NiFi Connector Developer Manual
