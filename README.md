@@ -56,4 +56,3 @@ Saving Data to GPUdb
 		
 The input for the PutGPUdb processor is a CSV of the same format as the output of GetGPUdb
 
-
