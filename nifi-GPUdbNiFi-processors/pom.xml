@@ -11,6 +11,30 @@
 	<build>
 		<pluginManagement>    
 			<plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>2.4.3</version>
+                    <executions>
+                        <execution>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>shade</goal>
+                            </goals>
+                            <configuration>
+                                <shadedArtifactAttached>true</shadedArtifactAttached>
+                                <shadedClassifierName>shaded</shadedClassifierName>
+                                <relocations>
+                                  <relocation>
+                                    <pattern>org.apache.avro</pattern>
+                                    <shadedPattern>org.shaded.apache.avro</shadedPattern>
+                                  </relocation>
+                                </relocations>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>            
+                           
 				<plugin>
 					<artifactId>maven-compiler-plugin</artifactId>
 					<version>3.2</version>
@@ -34,7 +58,6 @@
 			<url>http://gpudb.com/nexus/content/repositories/snapshots/</url>
 		</repository>
 	</repositories>
-
 
     <dependencies>
         <dependency>
@@ -67,7 +90,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
-            <version>1.2</version>
+            <version>1.4</version>
         </dependency>
          <dependency>
             <groupId>com.gpudb</groupId>
@@ -83,6 +106,11 @@
             <groupId>com.twitter</groupId>
             <artifactId>hbc-core</artifactId>
             <version>2.2.0</version>
-        </dependency>                
+        </dependency>          
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>1.8.1</version>
+        </dependency>
     </dependencies>
 </project>
