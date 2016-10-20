@@ -17,3 +17,8 @@ com.gisfederal.gpudb.processors.GPUdbNiFi.GetCurrentWeather
 com.gisfederal.gpudb.processors.GPUdbNiFi.GetGPUdb
 com.gisfederal.gpudb.processors.GPUdbNiFi.GetTwitterGeo
 com.gisfederal.gpudb.processors.GPUdbNiFi.PutGPUdb
+com.gisfederal.gpudb.processors.GPUdbNiFi.PutGPUdbFromAttributes
+com.gisfederal.gpudb.processors.GPUdbNiFi.GetGPUdbToJSON
+com.gisfederal.gpudb.processors.GPUdbNiFi.PutWordCloudGPUdb
+com.gisfederal.gpudb.processors.GPUdbNiFi.PutKinetica
+com.gisfederal.gpudb.processors.GPUdbNiFi.PutKineticaFromFile
