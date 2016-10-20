@@ -1,31 +1,31 @@
-GPUdb NiFi Connector
-====================
+Kinetica NiFi Connector
+=======================
 
-This project is aimed to make GPUdb both a data source and data sink for NiFi.
+This project is aimed to make Kinetica both a data source and data sink for NiFi.
 
-The documentation can be found at http://www.gpudb.com/docs/5.2/index.html. The connector specific documentation can be found at:
+The documentation can be found at http://www.kinetica.com/docs/5.2/index.html. The connector specific documentation can be found at:
 
-*   www.gpudb.com/docs/5.2/connectors/nifi_guide.html
+*   www.kinetica.com/docs/5.2/connectors/nifi_guide.html
 
 For changes to the connector API, please refer to CHANGELOG.md.  For changes
-to GPUdb functions, please refer to CHANGELOG-FUNCTIONS.md.
+to Kinetica functions, please refer to CHANGELOG-FUNCTIONS.md.
 
 
 ==================================================
 NiFi Connector Developer Manual
 ==================================================
 
-The following guide provides step by step instructions to get started using GPUdb as a data source to read from and write to.
+The following guide provides step by step instructions to get started using Kinetica as a data source to read from and write to.
 
-Building the GPUdb NiFi Connector
-===========================
+Building the Kinetica NiFi Connector
+====================================
 1. Change directories to gpudb-connector-nifi and build with Maven ::
 
 		mvn clean package
 
 	
-Installing the GPUdb NiFi Connector into NiFi
-===========================
+Installing the Kinetica NiFi Connector into NiFi
+================================================
 Copy the file gpudb-connector-nifi/nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-1.0-SNAPSHOT.nar into the NiFi lib directory
 	
 
@@ -34,21 +34,21 @@ Twitter Example Template
 This project includes a NiFi template in the file GenericTwitterToGPUdb.xml.  This shows usage of both PutGPUdbFromAttributes and GetGPUdbToJSON.
 
 	
-Getting Streaming Data from GPUdb to JSON files
+Getting Streaming Data from Kintecia to JSON files
 ===================================================
 1.	Drag a new Processor onto the flow
 		- Select the type GetGPUdbToJSON		
 
 2.	In the Properties tab:
-		- Server URL: The URL of the GPUdb instance you are using.  This will be in the format http://<GPUdb host>:<GPUdb port>.  Ex. http://172.30.20.231:9191
+		- Server URL: The URL of the Kinetica instance you are using.  This will be in the format http://<Kinetica host>:<Kinetica port>.  Ex. http://172.30.20.231:9191
 		- Table Name: The name of the table to read from
-		- Table Monitor URL: The URL GPUdb will be using to forward any new data inserted into the above table.  This will be in the format tcp://<GPUdb host>:<Monitor port>. Ex. tcp://172.30.20.231:9002
+		- Table Monitor URL: The URL Kinetica will be using to forward any new data inserted into the above table.  This will be in the format tcp://<Kinetica host>:<Monitor port>. Ex. tcp://172.30.20.231:9002
 	
-The output of GetGPUdbToJSON is a JSON file containing the record inserted into the GPUdb table
+The output of GetGPUdbToJSON is a JSON file containing the record inserted into the Kinetica table.
 
 
-Saving Data to GPUdb using NiFi Attributes
-===========================================
+Saving Data to Kinetica using NiFi Attributes
+==============================================
 1.	Drag a new Processor onto the flow
 		- Select the type PutGPUdbFromAttributes		
 
@@ -56,16 +56,16 @@ Saving Data to GPUdb using NiFi Attributes
 		- Under "Auto terminate Relationships", check the "failure" and "success" options.
 
 3.	Properties tab:
-		- Server URL: The URL of the GPUdb instance you are using.  This will be in the format http://<GPUdb host>:<GPUdb port>  ex. http://172.30.20.231:9191
+		- Server URL: The URL of the Kinetica instance you are using.  This will be in the format http://<Kinetica host>:<Kinetica port>  ex. http://172.30.20.231:9191
 		- Collection Name: Set this value if you want the table created in a collection.
 		- Table Name: The name of the table to read from
 		- Schema: A CSV string, where each entry is of the form <fieldname>|<data type>[| subtype]* ex. x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data,URL|String|store_only
-				  For more details on schemas, read the GPUdb documentation.
-		- Label: The name of the GPUdb type created from the schema specified above
+				  For more details on schemas, read the Kinetica documentation.
+		- Label: The name of the Kinetica type created from the schema specified above
 
-4.	Specifying data to be saved into GPUdb:
-		- Place processors upstream from this which assigns values to user-defined attributes named gpudb.<field name>, where <field name> is the name of a field in your GPUdb table.
-		- Each record written to your GPUdb table will contain field values of:
+4.	Specifying data to be saved into Kinetica:
+		- Place processors upstream from this which assigns values to user-defined attributes named gpudb.<field name>, where <field name> is the name of a field in your Kinetica table.
+		- Each record written to your Kinetica table will contain field values of:
 			- the value in the attributes with names gpudb.<field name> or
 			- the value "" or 0 depending on the field type if no attribute is found with that field name.
 		
@@ -73,7 +73,7 @@ Saving Data to GPUdb using NiFi Attributes
 
 
 	
-Getting Streaming Data from GPUdb to CSV files
+Getting Streaming Data from Kinetica to CSV files
 ===================================================
 1.	Drag a new Processor onto the flow
 		- Select the type GetGPUdb		
@@ -82,15 +82,15 @@ Getting Streaming Data from GPUdb to CSV files
 		- Under "Auto terminate Relationships", check the "success" option.
 
 3.	In the Properties tab:
-		- Server URL: The URL of the GPUdb instance you are using.  This will be in the format http://<GPUdb host>:<GPUdb port>.  Ex. http://172.30.20.231:9191
+		- Server URL: The URL of the Kinetica instance you are using.  This will be in the format http://<Kinetica host>:<Kinetica port>.  Ex. http://172.30.20.231:9191
 		- Table Name: The name of the table to read from
-		- Table Monitor URL: The URL GPUdb will be using to forward any new data inserted into the above table.  This will be in the format tcp://<GPUdb host>:<Monitor port>. Ex. tcp://172.30.20.231:9002
+		- Table Monitor URL: The URL Kinetica will be using to forward any new data inserted into the above table.  This will be in the format tcp://<Kinetica host>:<Monitor port>. Ex. tcp://172.30.20.231:9002
 
 The output of GetGPUdb processor is a CSV, where the first line represents the schema and subsequent lines contain the data		
 		
 		
 		
-Saving Data to GPUdb using CSV files
+Saving Data to Kinetica using CSV files
 =====================================
 1.	Drag a new Processor onto the flow
 		- Select the type PutGPUdb		
@@ -99,11 +99,11 @@ Saving Data to GPUdb using CSV files
 		- Under "Auto terminate Relationships", check the "failure" and "success" options.
 
 3.	Properties tab:
-		- Server URL: The URL of the GPUdb instance you are using.  This will be in the format http://<GPUdb host>:<GPUdb port>  ex. http://172.30.20.231:9191
+		- Server URL: The URL of the Kinetica instance you are using.  This will be in the format http://<Kinetica host>:<Kinetica port>  ex. http://172.30.20.231:9191
 		- Collection Name: Set this value if you want the table created in a collection.
 		- Table Name: The name of the table to read from
 		- Schema: A CSV string, where each entry is of the form <fieldname>|<data type>[| subtype]* ex. x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data,URL|String|store_only
-				  For more details on schemas, read the GPUdb documentation.
+				  For more details on schemas, read the Kinetica documentation.
 
 4.	Create a connector between the data source processor and the PutGPUdb processor
 	In the Details tab:
