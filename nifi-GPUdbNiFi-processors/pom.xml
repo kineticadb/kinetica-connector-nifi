@@ -54,12 +54,12 @@
 		<repository>
 			<id>gpudb-releases</id>
 			<name>GPUdb Release Nexus</name>
-			<url>http://gpudb.com/nexus/content/repositories/releases/</url>
+			<url>http://files.kinetica.com/nexus/content/repositories/releases/</url>
 		</repository>
 		<repository>
 			<id>gpudb-snapshots</id>
 			<name>GPUdb Snapshot Nexus</name>
-			<url>http://gpudb.com/nexus/content/repositories/snapshots/</url>
+			<url>http://files.kinetica.com/nexus/content/repositories/snapshots/</url>
 		</repository>
 	</repositories>
 
