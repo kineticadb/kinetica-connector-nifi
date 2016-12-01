@@ -28,7 +28,7 @@ import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
-import org.apache.nifi.logging.ProcessorLog;
+import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
@@ -115,7 +115,7 @@ public class PutGPUdb extends AbstractProcessor {
     public  Type objectType;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
-    private ProcessorLog logger;
+    private ComponentLog logger;
     private char delimiter;
 
 

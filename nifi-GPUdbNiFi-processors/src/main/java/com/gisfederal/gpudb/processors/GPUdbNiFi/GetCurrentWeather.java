@@ -41,7 +41,7 @@ import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnUnscheduled;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
-import org.apache.nifi.logging.ProcessorLog;
+import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
@@ -121,7 +121,7 @@ public class GetCurrentWeather extends AbstractProcessor {
     private ConcurrentLinkedQueue<Object> queue;
 
 
-    private static List<Object> currentWeatherForCities(String apiKey, List<Integer> cities, ProcessorLog logger) throws IOException {
+    private static List<Object> currentWeatherForCities(String apiKey, List<Integer> cities, ComponentLog logger) throws IOException {
         HttpURLConnection connection = null;
         BufferedReader reader = null;
 
