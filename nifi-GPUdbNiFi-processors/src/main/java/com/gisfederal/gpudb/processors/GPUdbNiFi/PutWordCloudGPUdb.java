@@ -14,6 +14,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -24,6 +25,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -35,6 +38,7 @@ import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
+import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
@@ -152,6 +156,7 @@ public class PutWordCloudGPUdb extends AbstractProcessor {
     public  Type objectType;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
+    private ComponentLog logger;
     private char delimiter;
     private List<String> dictionary = null;
     private List<String> stopWords  = null;
@@ -233,8 +238,7 @@ public class PutWordCloudGPUdb extends AbstractProcessor {
         return type;
     }
 
-    @SuppressWarnings("unchecked")
-	@OnScheduled
+    @OnScheduled
     public void onScheduled(final ProcessContext context) throws GPUdbException {
         if(this.dictionary==null){
             File file = new File(context.getProperty(DICTIONARY_FILE).getValue());
@@ -295,12 +299,13 @@ public class PutWordCloudGPUdb extends AbstractProcessor {
         // Note: The following are length 1 arrays so that they can be declared
         // final and they can be used in anonymous functions.
 
+        final Type[] type = new Type[1];
+        final int[][] attributeNumbers = new int[1][];
         final boolean[] failed = { false };
 
 
         session.read(flowFile, new InputStreamCallback() {
-            @SuppressWarnings("resource")
-			@Override
+            @Override
             public void process(InputStream in) throws IOException {
                 try {
                     InputStreamReader inputReader = new InputStreamReader(in);

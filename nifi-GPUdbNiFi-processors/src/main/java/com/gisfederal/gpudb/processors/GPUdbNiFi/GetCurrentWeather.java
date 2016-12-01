@@ -337,8 +337,7 @@ public class GetCurrentWeather extends AbstractProcessor {
         FlowFile flowFile = session.create();
 
         flowFile = session.write(flowFile, new OutputStreamCallback() {
-            @SuppressWarnings("resource")
-			@Override
+            @Override
             public void process(OutputStream out) throws IOException {
                 PrintStream printStream = new PrintStream(out, false, "UTF-8");
                 CSVPrinter printer = new CSVPrinter(printStream, CSVFormat.RFC4180);

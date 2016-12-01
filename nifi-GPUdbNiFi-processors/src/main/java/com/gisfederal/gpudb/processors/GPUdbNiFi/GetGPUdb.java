@@ -9,6 +9,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -196,8 +197,7 @@ public class GetGPUdb extends AbstractProcessor {
         FlowFile flowFile = session.create();
 
         flowFile = session.write(flowFile, new OutputStreamCallback() {
-            @SuppressWarnings("resource")
-			@Override
+            @Override
             public void process(OutputStream out) throws IOException {
                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out))) {
                 CSVPrinter printer = new CSVPrinter(writer, CSVFormat.RFC4180.withDelimiter(delimiter));

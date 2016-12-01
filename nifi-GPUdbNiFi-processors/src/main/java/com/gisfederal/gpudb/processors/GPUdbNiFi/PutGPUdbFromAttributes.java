@@ -25,6 +25,7 @@ import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
+import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
@@ -103,6 +104,7 @@ public class PutGPUdbFromAttributes extends AbstractProcessor {
     public  Type objectType;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
+    private ComponentLog logger;
 
 
     @Override
@@ -275,10 +277,10 @@ public class PutGPUdbFromAttributes extends AbstractProcessor {
 
 
         session.read(flowFile, new InputStreamCallback() {
-            @SuppressWarnings({ "rawtypes", "unchecked" })
-			@Override
+            @Override
             public void process(InputStream in) throws IOException {
                 try {
+                    int count = 0;
                     Type tempType = objectType;
                     Record object = tempType.newInstance();
                     String value;

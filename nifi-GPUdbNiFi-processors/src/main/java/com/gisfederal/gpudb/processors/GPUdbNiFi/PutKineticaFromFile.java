@@ -20,6 +20,7 @@ import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.flowfile.FlowFile;
+import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
@@ -131,6 +132,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
     public  Type objectType;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
+    private ComponentLog logger;
     private char delimiter;
 
 
@@ -321,8 +323,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
 
         //validate data state
         session.read(flowFile, new InputStreamCallback() {
-            @SuppressWarnings("resource")
-			@Override
+            @Override
             public void process(InputStream in) {
                 try {
                     CSVParser parser = new CSVParser(new InputStreamReader(in), CSVFormat.RFC4180.withDelimiter(delimiter));
@@ -414,8 +415,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
         }
 
         session.read(flowFile, new InputStreamCallback() {
-            @SuppressWarnings("unchecked")
-			@Override
+            @Override
             public void process(InputStream in) throws IOException {
                 try {
                 	ArrayList<Record> failedInsertList = new ArrayList<Record>();

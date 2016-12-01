@@ -21,6 +21,7 @@ import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -60,6 +61,8 @@ import com.twitter.hbc.core.Constants;
 import com.twitter.hbc.core.endpoint.Location;
 import com.twitter.hbc.core.endpoint.Location.Coordinate;
 import com.twitter.hbc.core.endpoint.StatusesFilterEndpoint;
+import com.twitter.hbc.core.endpoint.StatusesFirehoseEndpoint;
+import com.twitter.hbc.core.endpoint.StatusesSampleEndpoint;
 import com.twitter.hbc.core.endpoint.StreamingEndpoint;
 import com.twitter.hbc.core.event.Event;
 import com.twitter.hbc.core.processor.StringDelimitedProcessor;
@@ -215,6 +218,7 @@ public class GetTwitterGeo extends AbstractProcessor {
     public void onScheduled(final ProcessContext context) throws MalformedURLException {
         messageQueue = new LinkedBlockingQueue<>(100000);
 
+        final String endpointName = ENDPOINT_FILTER.getValue(); //context.getProperty(ENDPOINT).getValue();
         final Authentication oauth = new OAuth1(context.getProperty(CONSUMER_KEY).getValue(),
                 context.getProperty(CONSUMER_SECRET).getValue(),
                 context.getProperty(ACCESS_TOKEN).getValue(),
