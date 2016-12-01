@@ -11,7 +11,6 @@ import com.gpudb.protocol.HasTableResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -28,7 +27,6 @@ import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
-import org.apache.nifi.logging.ProcessorLog;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.ProcessSession;
@@ -115,7 +113,6 @@ public class PutGPUdb extends AbstractProcessor {
     public  Type objectType;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
-    private ProcessorLog logger;
     private char delimiter;
 
 
@@ -295,7 +292,8 @@ public class PutGPUdb extends AbstractProcessor {
         final boolean[] failed = { false };
 
         session.read(flowFile, new InputStreamCallback() {
-            @Override
+            @SuppressWarnings("resource")
+			@Override
             public void process(InputStream in) {
                 try {
                     CSVParser parser = new CSVParser(new InputStreamReader(in), CSVFormat.RFC4180.withDelimiter(delimiter));
@@ -377,7 +375,8 @@ public class PutGPUdb extends AbstractProcessor {
         }
 
         session.read(flowFile, new InputStreamCallback() {
-            @Override
+            @SuppressWarnings("resource")
+			@Override
             public void process(InputStream in) throws IOException {
                 try {
                     CSVParser parser = new CSVParser(new InputStreamReader(in), CSVFormat.RFC4180.withDelimiter(delimiter));

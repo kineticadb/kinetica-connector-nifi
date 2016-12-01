@@ -10,17 +10,20 @@ import java.io.Serializable;
  */
 
 public class TwitterRecord extends RecordObject implements Serializable {
-        @RecordObject.Column(order = 0, properties = { ColumnProperty.DATA })
-	public String AUTHOR;
+    
+	private static final long serialVersionUID = 2161199912674401042L;
+
+		@RecordObject.Column(order = 0, properties = { ColumnProperty.DATA })
+		public String AUTHOR;
 
         @RecordObject.Column(order = 1)
-	public String TEXT;
+        public String TEXT;
         
         @RecordObject.Column(order = 2)
-	public long TIMESTAMP;
+        public long TIMESTAMP;
 
         @RecordObject.Column(order = 3)
-	public String URL;
+        public String URL;
 
         @RecordObject.Column(order = 4)
         public double x;

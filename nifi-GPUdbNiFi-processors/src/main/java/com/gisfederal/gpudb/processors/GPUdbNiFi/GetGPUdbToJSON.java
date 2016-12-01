@@ -1,6 +1,5 @@
 package com.gisfederal.gpudb.processors.GPUdbNiFi;
 
-import com.google.gson.Gson;
 import com.gpudb.Avro;
 import com.gpudb.Type;
 import com.gpudb.GPUdb;

@@ -240,6 +240,7 @@ public class PutKinetica extends AbstractProcessor {
 
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
 		final List<FlowFile> successes = new ArrayList<>();
@@ -310,6 +311,7 @@ public class PutKinetica extends AbstractProcessor {
 	 * Attributes that don't exist in the Kinetica Record object will be ignored
 	 * The Kinetica Record was created from the pipe delimited schema
 	 */
+	@SuppressWarnings("rawtypes")
 	private Record createGPUdbRecord (FlowFile flowFile, ProcessSession session) {
 		Record object = objectType.newInstance();
 		String value = null;

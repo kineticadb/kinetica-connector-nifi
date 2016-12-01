@@ -7,12 +7,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.nio.CharBuffer;
-import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -95,7 +92,8 @@ public class ConvertTweetToCSV extends AbstractProcessor {
         final Map<String, Object> attributes = new HashMap<>();
 
         session.read(flowFile, new InputStreamCallback() {
-            @Override
+            @SuppressWarnings("resource")
+			@Override
             public void process(InputStream in) throws IOException {               
                 try {
                     // getLogger().info("ConvertTweetToCSV, in read, in process, in try");
@@ -134,7 +132,8 @@ public class ConvertTweetToCSV extends AbstractProcessor {
             session.transfer(flowFile, REL_FAILURE);
         } else {
             flowFile = session.write(flowFile, new OutputStreamCallback() {
-                @Override
+                @SuppressWarnings("resource")
+				@Override
                 public void process(OutputStream out) throws IOException {
                     try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out))) {
                         CSVPrinter printer = new CSVPrinter(writer, CSVFormat.RFC4180.withDelimiter(DELIMITER));
