@@ -1,5 +1,7 @@
 package com.gisfederal.gpudb.processors.GPUdbNiFi;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -118,7 +120,7 @@ public class PutKinetica extends AbstractProcessor {
 	}
 
 	private Type createTable(ProcessContext context, String schemaStr) throws GPUdbException {
-		getLogger().info("Kinetica-createTable:" + tableName + ", schemaStr:" + schemaStr);
+		getLogger().debug("Kinetica-createTable:" + tableName + ", schemaStr:" + schemaStr);
 		HasTableResponse response = gpudb.hasTable(tableName, null);
 		if (response.getTableExists()) {
 			return (null);
@@ -130,7 +132,7 @@ public class PutKinetica extends AbstractProcessor {
 			String[] split = fieldStr.split("\\|", -1);
 			String name = split[0];
 			Class<?> type;
-			getLogger().info("field name:" + name + ", type:" + split[1].toLowerCase());
+			getLogger().debug("field name:" + name + ", type:" + split[1].toLowerCase());
 			if (split.length > 1) {
 				switch (split[1].toLowerCase()) {
 				case "double":
@@ -191,7 +193,7 @@ public class PutKinetica extends AbstractProcessor {
 
 			attributes.add(new Column(name, type, annotations));
 		}
-		getLogger().info("Kinetica-type:" + attributes);
+		getLogger().debug("Kinetica-type:" + attributes);
 		Type type = new Type(context.getProperty(PROP_LABEL).isSet() ? context.getProperty(PROP_LABEL).getValue() : "",
 				attributes);
 
@@ -224,14 +226,14 @@ public class PutKinetica extends AbstractProcessor {
 		try {
 			response = gpudb.hasTable(tableName, null);
 		} catch (GPUdbException ex) {
-			getLogger().info("failed hasTable, exception:" + ex.getMessage());
+			getLogger().error("failed hasTable, exception:" + ex.getMessage());
 			response = null;
 		}
 
 		if ((response != null) && (response.getTableExists())) {
-			getLogger().info("getting type from table:" + tableName);
+			getLogger().debug("getting type from table:" + tableName);
 			objectType = Type.fromTable(gpudb, tableName);
-			getLogger().info("objectType:" + objectType.toString());
+			getLogger().debug("objectType:" + objectType.toString());
 		} else if (context.getProperty(PROP_SCHEMA).isSet()) {
 			objectType = createTable(context, context.getProperty(PROP_SCHEMA).getValue());
 		} else {
@@ -251,7 +253,7 @@ public class PutKinetica extends AbstractProcessor {
 		if (flowFiles == null || flowFiles.size() == 0) {
 			return;
 		} else {
-			getLogger().info("Kinetica-Found {} rows for insert.", new Object[] { flowFiles.size(), null, null });
+			getLogger().debug("Kinetica-Found {} rows for insert.", new Object[] { flowFiles.size(), null, null });
 		}
 
 		ArrayList<Record> failedInsertList = new ArrayList<Record>();
@@ -263,7 +265,7 @@ public class PutKinetica extends AbstractProcessor {
 					.options(InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK, InsertRecordsRequest.Options.FALSE));
 		} catch (Exception e) {
 			// Get any records that failed to insert and retry them
-			getLogger().info("Kinetica-Found failed to create a BulkInserter, please check error logs for more details.",
+			getLogger().error("Kinetica-Found failed to create a BulkInserter, please check error logs for more details.",
 					new Object[] { null, null, null });
 			return;
 		}
@@ -277,6 +279,7 @@ public class PutKinetica extends AbstractProcessor {
 					successes.add(flowFile);
 				} catch (BulkInserter.InsertException e) {
 					// Get any records that failed to insert and retry them
+					getLogger().error(convertStacktraceToString(e));
 					failedInsertList.addAll((Collection<? extends Record>) e.getRecords());
 				}
 			}
@@ -287,6 +290,7 @@ public class PutKinetica extends AbstractProcessor {
 			bulkInserter.flush();
 		} catch (BulkInserter.InsertException e) {
 			// Get any records that failed to insert and retry them
+			getLogger().error(convertStacktraceToString(e));
 			failedInsertList.addAll((Collection<? extends Record>) e.getRecords());
 		}
 
@@ -362,12 +366,12 @@ public class PutKinetica extends AbstractProcessor {
 					object.put(columnName, value);
 				}
 
-				getLogger().info("Kinetica-Found {} column with value {} inserting into Kinetica.",
+				getLogger().debug("Kinetica-Found {} column with value {} inserting into Kinetica.",
 						new Object[] { columnName, value, null });
 			} catch (Exception e) {
 				// if the flow file fails to become an object, mark it as failed and null out the object for return handling
 				session.transfer(flowFile, REL_FAILURE);
-				getLogger().info("Kinetica-Found {} column with value {} and failed to create a Record Obect.",
+				getLogger().error("Kinetica-Found {} column with value {} and failed to create a Record Obect.",
 						new Object[] { columnName, value, null });
 				object = null;
 			}
@@ -375,19 +379,28 @@ public class PutKinetica extends AbstractProcessor {
 
 		return object;
     }
+	
+	private String convertStacktraceToString(Exception e) {
+		StringWriter sw = new StringWriter();
+		e.printStackTrace(new PrintWriter(sw));
+		String exceptionAsString = sw.toString();
+		
+		return exceptionAsString;
+	}
 
 	/*
 	 * If any rows fail to insert we can retry them
 	 */
 	private void handleRetrys(ArrayList<Record> retryList, BulkInserter<Record> bulkInserter) {
-		getLogger().info("Kinetica-Found {} records that failed insert. Retrying now.",
+		getLogger().error("Kinetica-Found {} records that failed insert. Retrying now.",
 				new Object[] { retryList.size(), null, null });
 		try {
 			for (Record recordType : retryList) {
 				bulkInserter.insert(recordType);
 			}
 		} catch (Exception e) {
-			getLogger().info("Kinetica-Found failed to handle retries.",
+			getLogger().error(convertStacktraceToString(e));
+			getLogger().error("Kinetica-Found failed to handle retries.",
 					new Object[] { null, null, null });
 		}
 
@@ -396,7 +409,8 @@ public class PutKinetica extends AbstractProcessor {
 			bulkInserter.flush();
 		} catch (BulkInserter.InsertException e) {
 			// If it fails the second time, then we are in big trouble
-			getLogger().info("Kinetica-Found failed to handle retries.",
+			getLogger().error(convertStacktraceToString(e));
+			getLogger().error("Kinetica-Found failed to handle retries.",
 					new Object[] { null, null, null });
 		}
 	}

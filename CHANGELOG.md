@@ -1,18 +1,16 @@
 GPUdb NiFi Connector Changelog
 ==============================
 
-Version 5.4.0 - 2016-11-29
+Version 6.0.0 - 2017-01-24
 --------------------------
 
 -   Releasing version
 
 
-Version 5.2.0 - 2016-07-20
+version 5.2.0 - 2016-07-20
 --------------------------
-
 -   Added PutGPUdbFromAttributes and GetGPUdbToJSON processors for more generic NiFi usage
 -   Added sample NiFi template to show usage
--   Maintenance.
 
 
 Version 5.1.0 - 2016-05-06
