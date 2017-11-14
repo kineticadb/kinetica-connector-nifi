@@ -1,15 +1,13 @@
 package com.gisfederal.gpudb.processors.GPUdbNiFi;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
@@ -26,6 +24,7 @@ import org.apache.nifi.processor.util.StandardValidators;
 
 import com.gpudb.BulkInserter;
 import com.gpudb.GPUdb;
+import com.gpudb.GPUdbBase.Options;
 import com.gpudb.GPUdbException;
 import com.gpudb.Record;
 import com.gpudb.RecordObject;
@@ -46,37 +45,63 @@ import com.gpudb.protocol.InsertRecordsRequest;
 @ReadsAttribute(attribute = "mime.type", description = "Determines MIME type of input file")
 public class PutKinetica extends AbstractProcessor {
 	public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder().name("Server URL")
-			.description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true).addValidator(StandardValidators.URL_VALIDATOR)
-			.build();
+			.description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true)
+			.addValidator(StandardValidators.URL_VALIDATOR).build();
 
 	public static final PropertyDescriptor PROP_COLLECTION = new PropertyDescriptor.Builder().name("Collection Name")
 			.description("Name of the Kinetica collection").required(false)
 			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
 	public static final PropertyDescriptor PROP_TABLE = new PropertyDescriptor.Builder().name("Table Name")
-			.description("Name of the Kinetica table").required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-			.build();
+			.description("Name of the Kinetica table").required(true)
+			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
 	public static final PropertyDescriptor PROP_SCHEMA = new PropertyDescriptor.Builder().name("Schema")
-			.description("Schema of the Kinetica table").required(false)
-			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
-
-	public static final PropertyDescriptor PROP_LABEL = new PropertyDescriptor.Builder().name("Label")
-			.description("Type label of the Kinetica table").required(false)
-			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
-
-	public static final PropertyDescriptor PROP_SEMANTIC_TYPE = new PropertyDescriptor.Builder().name("Semantic Type")
-			.description("Semantic type of the Kinetica table").required(false)
-			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+			.description("Schema of the Kinetica table. Schema not required if table exists in Kinetica already."
+					+ " Example schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data")
+			.required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
 	protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name("Batch Size")
 			.description("The maximum number of FlowFiles to process in a single execution. The FlowFiles will be "
 					+ "grouped by table, and a batch insert per table will be performed.")
-			.required(true).addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("1000").build();
+			.required(true).addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("500").build();
 
-	public static final PropertyDescriptor PROP_VERSION = new PropertyDescriptor.Builder().name("Version")
-			.description("Semantic type of the Kinetica table").required(false)
-			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue("1").build();
+	public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder().name("Username")
+			.description("Username to connect to Kinetica").required(false)
+			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+
+	public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder().name("Password")
+			.description("Password to connect to Kinetica").required(false)
+			.addValidator(StandardValidators.NON_EMPTY_VALIDATOR).sensitive(true).build();
+
+	protected static final PropertyDescriptor UPDATE_ON_EXISTING_PK = new PropertyDescriptor.Builder()
+			.name("Update on Existing PK")
+			.description(
+					"If the table has a primary key, then if the value is 'true' then if any of the records being added have the "
+							+ "same primary key as existing records, the existing records are replaced (i.e. *updated*) with the given records. "
+							+ "If 'false' and if the records being added have the same primary key as existing records, the given records with "
+							+ "existing primary keys are ignored (the existing records are left unchanged). It is quite possible that in this "
+							+ "case some of the given records will be inserted and some (those having existing primary keys) will be ignored "
+							+ "(or updated). If the specified table does not have a primary key column then this parameter is ignored. ")
+			.required(true).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("false").build();
+
+	protected static final PropertyDescriptor PROP_REPLICATE_TABLE = new PropertyDescriptor.Builder()
+			.name("Replicate Table")
+			.description(
+					"If the Kinetica table doesn't already exist then it will created by this processor. A value of true indicates that"
+							+ " the table that is created should be replicated.")
+			.required(true).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("false").build();
+
+	public static final PropertyDescriptor PROP_DATE_FORMAT = new PropertyDescriptor.Builder().name("Date Format")
+			.description("Provide the date format used for your datetime values"
+					+ " Example: yyyy/MM/dd HH:mm:ss")
+			.required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+
+	public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder().name("Timezone")
+			.description(
+					"Provide the timezone the data was created in. If no timezone is set, the current timezone will be used."
+							+ " Example: EST")
+			.required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
 	public static final Relationship REL_SUCCESS = new Relationship.Builder().name("success")
 			.description("All FlowFiles that are written to Kinetica are routed to this relationship").build();
@@ -89,6 +114,9 @@ public class PutKinetica extends AbstractProcessor {
 	public Type objectType;
 	private List<PropertyDescriptor> descriptors;
 	private Set<Relationship> relationships;
+	private boolean updateOnExistingPk;
+	private String dataFormat;
+	private String timeZone;
 
 	@Override
 	protected void init(final ProcessorInitializationContext context) {
@@ -97,10 +125,14 @@ public class PutKinetica extends AbstractProcessor {
 		descriptorList.add(PROP_COLLECTION);
 		descriptorList.add(PROP_TABLE);
 		descriptorList.add(PROP_SCHEMA);
-		descriptorList.add(PROP_LABEL);
-		descriptorList.add(PROP_SEMANTIC_TYPE);
 		descriptorList.add(PROP_BATCH_SIZE);
-		descriptorList.add(PROP_VERSION);
+		descriptorList.add(PROP_USERNAME);
+		descriptorList.add(PROP_PASSWORD);
+		descriptorList.add(UPDATE_ON_EXISTING_PK);
+		descriptorList.add(PROP_REPLICATE_TABLE);
+		descriptorList.add(PROP_DATE_FORMAT);
+		descriptorList.add(PROP_TIMEZONE);
+
 		this.descriptors = Collections.unmodifiableList(descriptorList);
 
 		final Set<Relationship> relationshipList = new HashSet<>();
@@ -144,6 +176,7 @@ public class PutKinetica extends AbstractProcessor {
 					break;
 
 				case "integer":
+				case "int":
 					type = Integer.class;
 					break;
 
@@ -194,8 +227,7 @@ public class PutKinetica extends AbstractProcessor {
 			attributes.add(new Column(name, type, annotations));
 		}
 		getLogger().debug("Kinetica-type:" + attributes);
-		Type type = new Type(context.getProperty(PROP_LABEL).isSet() ? context.getProperty(PROP_LABEL).getValue() : "",
-				attributes);
+		Type type = new Type("", attributes);
 
 		String typeId = type.create(gpudb);
 		response = gpudb.hasTable(tableName, null);
@@ -205,21 +237,36 @@ public class PutKinetica extends AbstractProcessor {
 			parent = "";
 		}
 
-		create_table_options = GPUdb.options(CreateTableRequest.Options.COLLECTION_NAME, parent);
-
 		if (!response.getTableExists()) {
+			boolean replicated_flag = context.getProperty(PROP_REPLICATE_TABLE).isSet()
+					&& context.getProperty(PROP_REPLICATE_TABLE).asBoolean().booleanValue();
+			getLogger().debug("replicated_flag = " + replicated_flag);
+
+			create_table_options = GPUdb.options(CreateTableRequest.Options.COLLECTION_NAME, parent,
+					CreateTableRequest.Options.IS_REPLICATED,
+					replicated_flag ? CreateTableRequest.Options.TRUE : CreateTableRequest.Options.FALSE);
+
+			getLogger().debug("create_table_options has " + create_table_options.size() + "properties");
 			gpudb.createTable(context.getProperty(PROP_TABLE).getValue(), typeId, create_table_options);
 		}
 
 		gpudb.addKnownType(typeId, RecordObject.class);
-
 		return type;
 	}
 
 	@OnScheduled
 	public void onScheduled(final ProcessContext context) throws GPUdbException {
-		gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue());
+		Options option = new Options();
+		if (context.getProperty(PROP_USERNAME).getValue() != null
+				&& context.getProperty(PROP_PASSWORD).getValue() != null) {
+			option.setUsername(context.getProperty(PROP_USERNAME).getValue());
+			option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
+		}
+		gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue(), option);
 		tableName = context.getProperty(PROP_TABLE).getValue();
+		updateOnExistingPk = context.getProperty(UPDATE_ON_EXISTING_PK).asBoolean().booleanValue();
+		dataFormat = context.getProperty(PROP_DATE_FORMAT).getValue();
+		timeZone = context.getProperty(PROP_TIMEZONE).getValue();
 
 		HasTableResponse response;
 
@@ -239,16 +286,18 @@ public class PutKinetica extends AbstractProcessor {
 		} else {
 			objectType = null;
 		}
-
 	}
 
+	@SuppressWarnings("unchecked")
 	@Override
 	public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
 		final List<FlowFile> successes = new ArrayList<>();
 		final int batchSize = context.getProperty(PROP_BATCH_SIZE).asInteger();
 		BulkInserter<Record> bulkInserter = null;
+		BulkInserter.WorkerList workers = null;
 
-		//get flowfiles and continue to ad them to the BulkInserter. It will use the batch size to flush them to Kinetica automatically
+		// get flowfiles and continue to ad them to the BulkInserter. It will
+		// use the batch size to flush them to Kinetica automatically
 		List<FlowFile> flowFiles = session.get(batchSize);
 		if (flowFiles == null || flowFiles.size() == 0) {
 			return;
@@ -256,16 +305,18 @@ public class PutKinetica extends AbstractProcessor {
 			getLogger().debug("Kinetica-Found {} rows for insert.", new Object[] { flowFiles.size(), null, null });
 		}
 
-		ArrayList<Record> failedInsertList = new ArrayList<Record>();
-
 		try {
-			// bulk inserter automatically flushes to Kinetica when the batch size
-			// is met
-			bulkInserter = new BulkInserter<Record>(gpudb, tableName, objectType, batchSize, GPUdb
-					.options(InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK, InsertRecordsRequest.Options.FALSE));
+			// bulk inserter automatically flushes to Kinetica when the batch
+			// size is met
+			workers = new BulkInserter.WorkerList(gpudb);
+			bulkInserter = new BulkInserter<Record>(gpudb, tableName, objectType, batchSize, GPUdb.options(
+					InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK,
+					updateOnExistingPk ? InsertRecordsRequest.Options.TRUE : InsertRecordsRequest.Options.FALSE),
+					workers);
+
 		} catch (Exception e) {
-			// Get any records that failed to insert and retry them
-			getLogger().error("Kinetica-Found failed to create a BulkInserter, please check error logs for more details.",
+			getLogger().error(
+					"Kinetica-Found failed to create a BulkInserter, please check error logs for more details.",
 					new Object[] { null, null, null });
 			return;
 		}
@@ -279,9 +330,15 @@ public class PutKinetica extends AbstractProcessor {
 					successes.add(flowFile);
 				} catch (BulkInserter.InsertException e) {
 					// Get any records that failed to insert and retry them
-					getLogger().error(convertStacktraceToString(e));
-					failedInsertList.addAll((Collection<? extends Record>) e.getRecords());
+					getLogger().error(KineticaUtilities.convertStacktraceToString(e));
+					session.transfer(flowFile, REL_FAILURE);
 				}
+			} else {
+				// Failed to create a Record Object, mark record as failed
+				getLogger().error(
+						"Kinetica-Found failed to create a Record Object, please check error logs for more details.",
+						new Object[] { null, null, null });
+				session.transfer(flowFile, REL_FAILURE);
 			}
 		}
 
@@ -289,32 +346,26 @@ public class PutKinetica extends AbstractProcessor {
 		try {
 			bulkInserter.flush();
 		} catch (BulkInserter.InsertException e) {
-			// Get any records that failed to insert and retry them
-			getLogger().error(convertStacktraceToString(e));
-			failedInsertList.addAll((Collection<? extends Record>) e.getRecords());
+			getLogger().error(KineticaUtilities.convertStacktraceToString(e));
 		}
 
-		// handle any errors - the flowfiles are already in the successes array to be marked as success
-		if (failedInsertList.size() > 0) {
-			handleRetrys(failedInsertList, bulkInserter);
-		}
 		final long sendMillis = System.currentTimeMillis() - start;
-		//mark all flowfiles as successful if they made it to Kinetica
+		// mark all flowfiles as successful if they made it to Kinetica
 		for (FlowFile insertedFlowFile : successes) {
 			session.transfer(insertedFlowFile, REL_SUCCESS);
 			final String details = "Insert " + insertedFlowFile.toString() + " into Kinetica";
-			session.getProvenanceReporter().send(insertedFlowFile, PROP_SERVER + " " + PROP_TABLE, details,
-					sendMillis);
+			session.getProvenanceReporter().send(insertedFlowFile, PROP_SERVER + " " + PROP_TABLE, details, sendMillis);
 		}
 	}
 
 	/*
-	 * Create a Record for the Flowfile
-	 * The Kinetica Record object will be used to map to the attributes in the FlowFile
-	 * Attributes that don't exist in the Kinetica Record object will be ignored
-	 * The Kinetica Record was created from the pipe delimited schema
+	 * Create a Record for the Flowfile The Kinetica Record object will be used
+	 * to map to the attributes in the FlowFile Attributes that don't exist in
+	 * the Kinetica Record object will be ignored The Kinetica Record was
+	 * created from the pipe delimited schema
 	 */
-	private Record createGPUdbRecord (FlowFile flowFile, ProcessSession session) {
+	@SuppressWarnings("rawtypes")
+	private Record createGPUdbRecord(FlowFile flowFile, ProcessSession session) {
 		Record object = objectType.newInstance();
 		String value = null;
 		String columnName = null;
@@ -326,10 +377,26 @@ public class PutKinetica extends AbstractProcessor {
 				if (attributeMap.containsKey(columnName)) {
 					value = attributeMap.get(columnName).toString();
 				} else {
-					value = "";
+					value = null;
 				}
-			
-				if (column.getType() == Double.class) {
+
+				boolean timeStamp = KineticaUtilities.checkForTimeStamp(column.getProperties());
+
+				if (timeStamp && value != null) {
+					if (StringUtils.isNumeric(value)) {
+						long valueLong;
+						try {
+							valueLong = Long.parseLong(value);
+						} catch (NumberFormatException ex) {
+							valueLong = 0;
+						}
+
+						object.put(columnName, valueLong);
+					} else {
+						Long timestamp = KineticaUtilities.parseDate(value, dataFormat, timeZone, getLogger());
+						object.put(columnName, timestamp);
+					}
+				} else if (column.getType() == Double.class && value != null) {
 					double valueDouble;
 					try {
 						valueDouble = Double.parseDouble(value);
@@ -337,7 +404,7 @@ public class PutKinetica extends AbstractProcessor {
 						valueDouble = 0;
 					}
 					object.put(columnName, valueDouble);
-				} else if (column.getType() == Float.class) {
+				} else if (column.getType() == Float.class && value != null) {
 					float valueFloat;
 					try {
 						valueFloat = Float.parseFloat(value);
@@ -345,7 +412,7 @@ public class PutKinetica extends AbstractProcessor {
 						valueFloat = 0;
 					}
 					object.put(columnName, valueFloat);
-				} else if (column.getType() == Integer.class) {
+				} else if (column.getType() == Integer.class && value != null) {
 					int valueInt;
 					try {
 						valueInt = Integer.parseInt(value);
@@ -353,7 +420,7 @@ public class PutKinetica extends AbstractProcessor {
 						valueInt = 0;
 					}
 					object.put(columnName, valueInt);
-				} else if (column.getType() == java.lang.Long.class) {
+				} else if (column.getType() == java.lang.Long.class && value != null) {
 					long valueLong;
 					try {
 						valueLong = Long.parseLong(value);
@@ -363,13 +430,16 @@ public class PutKinetica extends AbstractProcessor {
 
 					object.put(columnName, valueLong);
 				} else {
-					object.put(columnName, value);
+					if (value != null && !value.trim().equals("")) {
+						object.put(columnName, value);
+					}
 				}
 
 				getLogger().debug("Kinetica-Found {} column with value {} inserting into Kinetica.",
 						new Object[] { columnName, value, null });
 			} catch (Exception e) {
-				// if the flow file fails to become an object, mark it as failed and null out the object for return handling
+				// if the flow file fails to become an object, mark it as failed
+				// and null out the object for return handling
 				session.transfer(flowFile, REL_FAILURE);
 				getLogger().error("Kinetica-Found {} column with value {} and failed to create a Record Obect.",
 						new Object[] { columnName, value, null });
@@ -378,41 +448,5 @@ public class PutKinetica extends AbstractProcessor {
 		}
 
 		return object;
-    }
-	
-	private String convertStacktraceToString(Exception e) {
-		StringWriter sw = new StringWriter();
-		e.printStackTrace(new PrintWriter(sw));
-		String exceptionAsString = sw.toString();
-		
-		return exceptionAsString;
 	}
-
-	/*
-	 * If any rows fail to insert we can retry them
-	 */
-	private void handleRetrys(ArrayList<Record> retryList, BulkInserter<Record> bulkInserter) {
-		getLogger().error("Kinetica-Found {} records that failed insert. Retrying now.",
-				new Object[] { retryList.size(), null, null });
-		try {
-			for (Record recordType : retryList) {
-				bulkInserter.insert(recordType);
-			}
-		} catch (Exception e) {
-			getLogger().error(convertStacktraceToString(e));
-			getLogger().error("Kinetica-Found failed to handle retries.",
-					new Object[] { null, null, null });
-		}
-
-		// Flush the bulk inserter object to make sure all objects are inserted
-		try {
-			bulkInserter.flush();
-		} catch (BulkInserter.InsertException e) {
-			// If it fails the second time, then we are in big trouble
-			getLogger().error(convertStacktraceToString(e));
-			getLogger().error("Kinetica-Found failed to handle retries.",
-					new Object[] { null, null, null });
-		}
-	}
-
 }

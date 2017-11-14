@@ -1,11 +1,5 @@
 package com.gisfederal.gpudb.processors.GPUdbNiFi;
 
-import com.google.gson.Gson;
-import com.gpudb.Avro;
-import com.gpudb.Type;
-import com.gpudb.GPUdb;
-import com.gpudb.GPUdbException;
-import com.gpudb.protocol.CreateTableMonitorResponse;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -19,21 +13,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericDatumWriter;
+
 import org.apache.avro.generic.GenericRecord;
-import org.apache.avro.io.DatumWriter;
-import org.apache.avro.io.EncoderFactory;
-import org.apache.avro.io.JsonEncoder;
-
-
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
-import org.apache.nifi.components.PropertyDescriptor;
-import org.apache.nifi.flowfile.FlowFile;
-import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
+import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnUnscheduled;
+import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
@@ -41,19 +31,25 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
-import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.processor.io.OutputStreamCallback;
+import org.apache.nifi.processor.util.StandardValidators;
 import org.zeromq.ZFrame;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
 
+import com.gpudb.Avro;
+import com.gpudb.GPUdb;
+import com.gpudb.GPUdbBase.Options;
+import com.gpudb.GPUdbException;
+import com.gpudb.Type;
+import com.gpudb.protocol.CreateTableMonitorResponse;
 
 @Tags({"gpudb", "get"})
 @CapabilityDescription("Monitors a set in GPUdb and reads new objects into CSV files")
-@WritesAttribute(attribute = "mime.type", description = "Sets MIME type to application/json")
-public class GetGPUdbToJSON extends AbstractProcessor {
+@WritesAttribute(attribute = "mime.type", description = "Sets MIME type to text/csv")
+public class GetKineticaToCSV extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder()
             .name("Server URL")
             .description("URL of the GPUdb server")
@@ -75,6 +71,29 @@ public class GetGPUdbToJSON extends AbstractProcessor {
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
     
+    public static final PropertyDescriptor PROP_DELIMITER = new PropertyDescriptor.Builder()
+            .name("Delimiter")
+            .description("Delimiter of input data (usually a ',' or '\t' (tab); defaults to '\t' (tab))")
+            .required(false)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .defaultValue("\t")
+            .build();
+    
+    public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder()
+            .name("Username")
+            .description("Username to connect to Kinetica")
+            .required(false)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build(); 
+	
+	public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
+            .name("Password")
+            .description("Password to connect to Kinetica")
+            .required(false)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .sensitive(true)
+            .build();
+	
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
             .name("success")
             .description("All CSV files from the GPUdb set are routed to this relationship")
@@ -87,18 +106,23 @@ public class GetGPUdbToJSON extends AbstractProcessor {
     private ConcurrentLinkedQueue<GenericRecord> queue;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
+    private char delimiter;
     
     @Override
     protected void init(final ProcessorInitializationContext context) {
-        final List<PropertyDescriptor> descriptorsList = new ArrayList<>();
-        descriptorsList.add(PROP_SERVER);
-        descriptorsList.add(PROP_SET);
-        descriptorsList.add(PROP_OBJECT_MONITOR);       
-        this.descriptors = Collections.unmodifiableList(descriptorsList);
+        final List<PropertyDescriptor> descriptors = new ArrayList<>();
+        descriptors.add(PROP_SERVER);
+        descriptors.add(PROP_SET);
+        descriptors.add(PROP_OBJECT_MONITOR);
+        descriptors.add(PROP_DELIMITER);   
+        descriptors.add(PROP_USERNAME);
+        descriptors.add(PROP_PASSWORD);
+        
+        this.descriptors = Collections.unmodifiableList(descriptors);
 
-        final Set<Relationship> relationshipsList = new HashSet<>();
-        relationshipsList.add(REL_SUCCESS);
-        this.relationships = Collections.unmodifiableSet(relationshipsList);
+        final Set<Relationship> relationships = new HashSet<>();
+        relationships.add(REL_SUCCESS);
+        this.relationships = Collections.unmodifiableSet(relationships);
     }
 
     @Override
@@ -114,8 +138,15 @@ public class GetGPUdbToJSON extends AbstractProcessor {
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws GPUdbException {
 
-        gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue());
+    	Options option = new Options();
+    	if (context.getProperty(PROP_USERNAME).getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
+    		option.setUsername(context.getProperty(PROP_USERNAME).getValue());
+    		option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
+    	}
+        gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue(), option);
+        
         set = context.getProperty(PROP_SET).getValue();
+        delimiter = context.getProperty(PROP_DELIMITER).getValue().charAt(0);
         objectType = Type.fromTable(gpudb, set);
         queue = new ConcurrentLinkedQueue<>();
 
@@ -170,7 +201,6 @@ public class GetGPUdbToJSON extends AbstractProcessor {
         }
     }
 
-
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
         final List<GenericRecord> objectList = new ArrayList<>();
@@ -195,28 +225,59 @@ public class GetGPUdbToJSON extends AbstractProcessor {
         flowFile = session.write(flowFile, new OutputStreamCallback() {
             @Override
             public void process(OutputStream out) throws IOException {
-               //should output one flowfile per record, not sure about this yet
-                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out))) {    
-                    for (GenericRecord object : objectList) {
-                        Schema schema = object.getSchema();
-                        JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, out);
-                        DatumWriter<Object> datumWriter = new GenericDatumWriter<>(schema);
-                        datumWriter.write(object, encoder);
-                        writer.flush();
-                        out.flush();
-                        encoder.flush();
-                        getLogger().info("writing record {} to set {} at {}.", new Object[] { object.toString(), set, gpudb.getURL() });
+               try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out))) {
+                CSVPrinter printer = new CSVPrinter(writer, CSVFormat.RFC4180.withDelimiter(delimiter));
+                       
+                ArrayList<String> fields = new ArrayList<>();
+
+                for (Type.Column attribute : objectType.getColumns()) {
+                    String field = attribute.getName() + "|";
+
+                    if (attribute.getType() == Double.TYPE) {
+                        field += "double";
+                    } else if (attribute.getType() == Float.TYPE) {
+                        field += "float";
+                    } else if (attribute.getType() == Integer.TYPE) {
+                        field += "int";
+                    } else if (attribute.getType() == Long.TYPE) {
+                        field += "long";
+                    } else {
+                        field += "string";
                     }
+
+                    for (String annotation : attribute.getProperties()) {
+                        field += "|" + annotation;
+                    }
+
+                    fields.add(field);
                 }
-                catch(Exception ex){
-                    getLogger().error("Unable to get data from {}", new Object[] { context.getProperty(PROP_OBJECT_MONITOR).getValue() }, ex);
+
+                printer.printRecord(fields);
+                int count = 0;
+
+                for (GenericRecord object : objectList) {
+                    fields.clear();
+
+                    for (int i = 0; i < objectType.getColumns().size(); i++) {
+                        fields.add(object.get(i).toString());
+                    }
+
+                    printer.printRecord(fields);
+                    count++;
                 }
+
+                printer.flush();
+                writer.flush();
+                out.flush();
+                getLogger().info("Got {} record(s) from set {} at {}.", new Object[] { count, set, gpudb.getURL() });
+                
+               }
             }
         });
 
         final Map<String, String> attributes = new HashMap<>();
-        attributes.put(CoreAttributes.MIME_TYPE.key(), "application/json");
-        attributes.put(CoreAttributes.FILENAME.key(), flowFile.getAttribute(CoreAttributes.FILENAME.key()) + ".json");
+        attributes.put(CoreAttributes.MIME_TYPE.key(), "text/csv");
+        attributes.put(CoreAttributes.FILENAME.key(), flowFile.getAttribute(CoreAttributes.FILENAME.key()) + ".csv");
         flowFile = session.putAllAttributes(flowFile, attributes);
         session.getProvenanceReporter().receive(flowFile, gpudb.getURL().toString(), set);
         session.transfer(flowFile, REL_SUCCESS);
