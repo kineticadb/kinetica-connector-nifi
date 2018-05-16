@@ -2,11 +2,14 @@ GPUdb NiFi Connector Changelog
 ==============================
 
 
-Version 6.2.0 - 2018-02-11
+Version 6.2.0 - 2018-05-16
 --------------------------
 
--   Version release
-
+-   Added the ability to customize the following for the PutKineticaFromFile
+    processor (which loads a CSV file into Kinetica):
+    -   Delimiter
+    -   Quote character
+    -   Escape character
 
 Version 6.1.0 - 2017-10-05
 --------------------------

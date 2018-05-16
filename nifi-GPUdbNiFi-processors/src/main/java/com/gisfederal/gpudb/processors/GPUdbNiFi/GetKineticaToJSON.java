@@ -81,8 +81,8 @@ public class GetKineticaToJSON extends AbstractProcessor {
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build(); 
-	
-	public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
+    
+    public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
             .name("Password")
             .description("Password to connect to Kinetica")
             .required(false)
@@ -132,11 +132,11 @@ public class GetKineticaToJSON extends AbstractProcessor {
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws GPUdbException {
 
-    	Options option = new Options();
-    	if (context.getProperty(PROP_USERNAME).getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
-    		option.setUsername(context.getProperty(PROP_USERNAME).getValue());
-    		option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
-    	}
+        Options option = new Options();
+        if (context.getProperty(PROP_USERNAME).getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
+            option.setUsername(context.getProperty(PROP_USERNAME).getValue());
+            option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
+        }
         gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue(), option);
         
         set = context.getProperty(PROP_SET).getValue();

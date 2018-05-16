@@ -85,15 +85,15 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build(); 
-	
-	public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
+    
+    public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
             .name("Password")
             .description("Password to connect to Kinetica")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .sensitive(true)
             .build();
-	
+    
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
             .name("success")
             .description("All CSV files from the GPUdb set are routed to this relationship")
@@ -138,11 +138,11 @@ public class GetKineticaToCSV extends AbstractProcessor {
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws GPUdbException {
 
-    	Options option = new Options();
-    	if (context.getProperty(PROP_USERNAME).getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
-    		option.setUsername(context.getProperty(PROP_USERNAME).getValue());
-    		option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
-    	}
+        Options option = new Options();
+        if (context.getProperty(PROP_USERNAME).getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
+            option.setUsername(context.getProperty(PROP_USERNAME).getValue());
+            option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
+        }
         gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue(), option);
         
         set = context.getProperty(PROP_SET).getValue();
