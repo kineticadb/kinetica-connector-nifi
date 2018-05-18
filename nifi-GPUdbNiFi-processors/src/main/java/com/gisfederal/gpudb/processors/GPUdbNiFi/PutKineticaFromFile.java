@@ -71,17 +71,17 @@ public class PutKineticaFromFile extends AbstractProcessor {
         .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_DELIMITER = new PropertyDescriptor.Builder().name("Delimiter")
-        .description("Delimiter of CSV input data (usually a ',' or '\t' (tab); defaults to '\t' (tab))")
-        .required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue("\t").build();
+        .description("Delimiter of CSV input data (usually a ',' or '\t' (tab); defaults to ',' (comma))")
+        .required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue(",").build();
 
     public static final PropertyDescriptor PROP_ESCAPE_CHAR = new PropertyDescriptor.Builder().name("Escape Character")
-        .description("Escape character for the CSV input data (usually a '\' or '\"' (double quote); defaults to '\t' (tab))")
+        .description("Escape character for the CSV input data (usually a '\' or '\"' (double quote); defaults to '\"' (double quote))")
         .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue("\"").build();
 
     public static final PropertyDescriptor PROP_QUOTE_CHAR = new PropertyDescriptor.Builder().name("Quote Character")
         .description("Quote character for the CSV input data (usually a '\"'(double quote); defaults to '\"' (double quote)). "
                      + "When empty, no quote character is used.")
-        .required(false).addValidator( new StandardValidators.StringLengthValidator(0, 1)).defaultValue("a").build();
+        .required(false).addValidator( new StandardValidators.StringLengthValidator(0, 1)).defaultValue("\"").build();
 
     protected static final PropertyDescriptor PROP_HAS_HEADER = new PropertyDescriptor.Builder()
         .name("File Has Header")
