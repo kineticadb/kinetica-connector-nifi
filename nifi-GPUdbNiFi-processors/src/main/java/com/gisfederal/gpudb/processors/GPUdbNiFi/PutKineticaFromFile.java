@@ -87,7 +87,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
         .name("File Has Header")
         .description(
                      "If true, then the processor will treat the first line of the file as a header line. "
-                     + "If false, the first line will be treated like a record.")
+                     + "If false, the first line will be treated like a record. The default is 'true'.")
         .required(false).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("true").build();
 
     protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name("Batch Size")
