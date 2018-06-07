@@ -118,6 +118,7 @@ public class PutKinetica extends AbstractProcessor {
     private boolean updateOnExistingPk;
     private String dataFormat;
     private String timeZone;
+    private static final String PROCESSOR_NAME = "PutKinetica";
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
@@ -153,7 +154,7 @@ public class PutKinetica extends AbstractProcessor {
     }
 
     private Type createTable(ProcessContext context, String schemaStr) throws GPUdbException {
-        getLogger().debug("Kinetica-createTable:" + tableName + ", schemaStr:" + schemaStr);
+        getLogger().debug(PROCESSOR_NAME + " createTable:" + tableName + ", schemaStr:" + schemaStr);
         HasTableResponse response = gpudb.hasTable(tableName, null);
         if (response.getTableExists()) {
             return (null);
@@ -165,7 +166,7 @@ public class PutKinetica extends AbstractProcessor {
             String[] split = fieldStr.split("\\|", -1);
             String name = split[0];
             Class<?> type;
-            getLogger().debug("field name:" + name + ", type:" + split[1].toLowerCase());
+            getLogger().debug(PROCESSOR_NAME + " field name:" + name + ", type:" + split[1].toLowerCase());
             if (split.length > 1) {
                 switch (split[1].toLowerCase()) {
                 case "double":
@@ -227,7 +228,7 @@ public class PutKinetica extends AbstractProcessor {
 
             attributes.add(new Column(name, type, annotations));
         }
-        getLogger().debug("Kinetica-type:" + attributes);
+        getLogger().debug(PROCESSOR_NAME + " created type:" + attributes);
         Type type = new Type("", attributes);
 
         String typeId = type.create(gpudb);
@@ -241,13 +242,13 @@ public class PutKinetica extends AbstractProcessor {
         if (!response.getTableExists()) {
             boolean replicated_flag = context.getProperty(PROP_REPLICATE_TABLE).isSet()
                     && context.getProperty(PROP_REPLICATE_TABLE).asBoolean().booleanValue();
-            getLogger().debug("replicated_flag = " + replicated_flag);
+            getLogger().debug(PROCESSOR_NAME + " replicated_flag = " + replicated_flag);
 
             create_table_options = GPUdb.options(CreateTableRequest.Options.COLLECTION_NAME, parent,
                     CreateTableRequest.Options.IS_REPLICATED,
                     replicated_flag ? CreateTableRequest.Options.TRUE : CreateTableRequest.Options.FALSE);
 
-            getLogger().debug("create_table_options has " + create_table_options.size() + "properties");
+            getLogger().debug(PROCESSOR_NAME + " create_table_options has " + create_table_options.size() + "properties");
             gpudb.createTable(context.getProperty(PROP_TABLE).getValue(), typeId, create_table_options);
         }
 
@@ -274,14 +275,14 @@ public class PutKinetica extends AbstractProcessor {
         try {
             response = gpudb.hasTable(tableName, null);
         } catch (GPUdbException ex) {
-            getLogger().error("failed hasTable, exception:" + ex.getMessage());
+            getLogger().error(PROCESSOR_NAME + " Error: Failed hasTable, exception:" + ex.getMessage());
             response = null;
         }
 
         if ((response != null) && (response.getTableExists())) {
-            getLogger().debug("getting type from table:" + tableName);
+            getLogger().debug(PROCESSOR_NAME + " getting type from table:" + tableName);
             objectType = Type.fromTable(gpudb, tableName);
-            getLogger().debug("objectType:" + objectType.toString());
+            getLogger().debug(PROCESSOR_NAME + " objectType:" + objectType.toString());
         } else if (context.getProperty(PROP_SCHEMA).isSet()) {
             objectType = createTable(context, context.getProperty(PROP_SCHEMA).getValue());
         } else {
@@ -303,7 +304,7 @@ public class PutKinetica extends AbstractProcessor {
         if (flowFiles == null || flowFiles.size() == 0) {
             return;
         } else {
-            getLogger().debug("Kinetica-Found {} rows for insert.", new Object[] { flowFiles.size(), null, null });
+            getLogger().debug(PROCESSOR_NAME + " Found {} rows for insert.", new Object[] { flowFiles.size(), null, null });
         }
 
         try {
@@ -316,8 +317,8 @@ public class PutKinetica extends AbstractProcessor {
                     workers);
 
         } catch (Exception e) {
-            getLogger().error(
-                    "Kinetica-Found failed to create a BulkInserter, please check error logs for more details.",
+            getLogger().error( PROCESSOR_NAME + 
+                    " Error: Found failed to create a BulkInserter, please check error logs for more details.",
                     new Object[] { null, null, null });
             return;
         }
@@ -331,13 +332,13 @@ public class PutKinetica extends AbstractProcessor {
                     successes.add(flowFile);
                 } catch (BulkInserter.InsertException e) {
                     // Get any records that failed to insert and retry them
-                    getLogger().error(KineticaUtilities.convertStacktraceToString(e));
+                    getLogger().error(PROCESSOR_NAME + " Error: " + e.getMessage() );
                     session.transfer(flowFile, REL_FAILURE);
                 }
             } else {
                 // Failed to create a Record Object, mark record as failed
-                getLogger().error(
-                        "Kinetica-Found failed to create a Record Object, please check error logs for more details.",
+                getLogger().error( PROCESSOR_NAME + 
+                        " Error: Found failed to create a Record Object, please check error logs for more details.",
                         new Object[] { null, null, null });
                 session.transfer(flowFile, REL_FAILURE);
             }
@@ -347,7 +348,7 @@ public class PutKinetica extends AbstractProcessor {
         try {
             bulkInserter.flush();
         } catch (BulkInserter.InsertException e) {
-            getLogger().error(KineticaUtilities.convertStacktraceToString(e));
+            getLogger().error(PROCESSOR_NAME + " Error: " + e.getMessage());
         }
 
         final long sendMillis = System.currentTimeMillis() - start;
@@ -436,13 +437,13 @@ public class PutKinetica extends AbstractProcessor {
                     }
                 }
 
-                getLogger().debug("Kinetica-Found {} column with value {} inserting into Kinetica.",
+                getLogger().debug(PROCESSOR_NAME + " Found {} column with value {} inserting into Kinetica.",
                         new Object[] { columnName, value, null });
             } catch (Exception e) {
                 // if the flow file fails to become an object, mark it as failed
                 // and null out the object for return handling
                 session.transfer(flowFile, REL_FAILURE);
-                getLogger().error("Kinetica-Found {} column with value {} and failed to create a Record Obect.",
+                getLogger().error(PROCESSOR_NAME +  " Error: Found {} column with value {} and failed to create a Record Obect.",
                         new Object[] { columnName, value, null });
                 object = null;
             }

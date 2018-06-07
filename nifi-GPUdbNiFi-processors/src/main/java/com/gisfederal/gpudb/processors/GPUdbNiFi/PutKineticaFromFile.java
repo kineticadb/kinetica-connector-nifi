@@ -359,7 +359,9 @@ public class PutKineticaFromFile extends AbstractProcessor {
                     updateOnExistingPk ? InsertRecordsRequest.Options.TRUE : InsertRecordsRequest.Options.FALSE),
                     workers);
         } catch (Exception e) {
-            throw new ProcessException(PROCESSOR_NAME + " Error: Failed to create BulkInserter " + KineticaUtilities.convertStacktraceToString(e));
+            throw new ProcessException( PROCESSOR_NAME + " Error: Failed to create BulkInserter " + e.getMessage()
+				        + "; for debugging purposes, here is the stack trace:\n"
+					+ KineticaUtilities.convertStacktraceToString(e) );
         }
         
         // Note: The following are length 1 arrays so that they can be declared
@@ -534,7 +536,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
                             try {
                                 bulkInserter.insert(object);
                             } catch (BulkInserter.InsertException e) {
-                                getLogger().error(PROCESSOR_NAME + " Error: " + KineticaUtilities.convertStacktraceToString(e));
+                                getLogger().error(PROCESSOR_NAME + " Error: " + e.getMessage() );
                             }
                         }
                         count++;
@@ -545,7 +547,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
                     try {
                         bulkInserter.flush();
                     } catch (BulkInserter.InsertException e) {
-                        getLogger().error( PROCESSOR_NAME + " Error: " + KineticaUtilities.convertStacktraceToString(e));
+                        getLogger().error( PROCESSOR_NAME + " Error: " + e.getMessage() );
                     }
 
                     getLogger().info(PROCESSOR_NAME + ": Wrote {} record(s) to set {} at {}.",
