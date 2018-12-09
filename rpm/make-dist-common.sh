@@ -5,7 +5,7 @@
 
 # The directory of this script.
 MAKE_DIST_COMMON_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-MAKE_DIST_COMMON_FILE="$SCRIPT_DIR/$(basename ${BASH_SOURCE[0]})"
+MAKE_DIST_COMMON_FILE="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +37,52 @@ function run_cmd
     fi
 }
 
+# ---------------------------------------------------------------------------
+# Ensure that we do not attempt to delete / or /* accidently (in case we rm -rf
+# some variable that is not set 'rm -rf ${SOME_BAD_VARIABLE}/*'
+
+function safe_rm_rf
+{
+    local TARGETS="$@"
+
+    # Come up with a whitelist of targets - only things in /home /mnt /opt and /root are fair game.
+    # If you want to delete something outside of these places, then you're on your own.
+    local WHITELIST_PREFIXES="/home /mnt /opt /root"
+
+    if [ -z "${TARGETS}" ]; then
+        echo "WARNING: attempting delete empty list of items '${TARGETS}' - check caller" >&2
+        get_stack >&2
+        return 0
+    fi
+
+    for TARGET in $TARGETS; do
+        TARGET="$(echo "$TARGET" | sed -E 's@/+@/@g')"
+        TARGET="$(readlink -m "$TARGET")"
+
+        local TARGET_OK=0
+        for WL in $WHITELIST_PREFIXES; do
+            # debug...
+            #echo "Testing $TARGET against $WL" >&2
+            if echo "$TARGET" | grep -E "^$WL" >/dev/null; then
+                TARGET_OK=1
+                break
+            fi
+        done
+
+        if [ "$TARGET_OK" != "1" ]; then
+            echo "ERROR: Invalid directory to delete ($TARGET)!" >&2
+            # run_cmd should handle this...
+            #get_stack >&2
+            exit 1
+        fi
+    done
+
+    for TARGET in $TARGETS; do
+        rm -rf ${TARGET}
+    done
+}
+
+
 # Change to a directory and exit if it failed
 function pushd_cmd
 {
@@ -45,6 +91,7 @@ function pushd_cmd
 
     if [ $? -ne 0 ] ; then
         echo "ERROR pushd dir '$DIR'" | tee -a $LOG
+        exit 1
     fi
 }
 
@@ -55,8 +102,23 @@ function popd_cmd
 
     if [ $? -ne 0 ] ; then
         echo "ERROR popd from dir '$PWD'" | tee -a $LOG
+        exit 1
     fi
 }
+
+# Make a tar.gz file and exit on failure. Uses pigz if available for speed.
+function run_tar_gz
+{
+    local TGZ_FILENAME="$1"
+    local FILES="$2"
+
+    if which pigz > /dev/null 2>&1 ; then
+        run_cmd "tar -cv $FILES | pigz -p 8 > $TGZ_FILENAME"
+    else
+        run_cmd "tar -czf $TGZ_FILENAME $FILES"
+    fi
+}
+
 
 # ---------------------------------------------------------------------------
 # Read a conf.ini parameter in the form "KEY SEPARATOR VALUE"
@@ -106,9 +168,10 @@ function change_conf_file_property
             echo "ERROR: Unable to update configuration setting $KEY to $NEW_VALUE in $FILENAME."
             exit 1
         fi
-        # Cannot use the following as currently grep does not support the combination of 
+        # Cannot use the following as currently grep does not support the combination of
         # -P and -z when searching for beginning or end of line (^ or $).
         #run_cmd "grep -Pzo \"^[ $(echo -e '\t')]*${KEY}[ $(echo -e '\t')]*${SEPARATOR}${NEW_VALUE}\" $FILENAME"
+        #run_cmd "grep -Ezo \"^[ $(echo -e '\t')]*${KEY}[ $(echo -e '\t')]*${SEPARATOR}${NEW_VALUE}\" $FILENAME"
     else
         run_cmd "sed -i \"s@\(^[ \t]*${KEY}[ \t]*${SEPARATOR}\).*@\1${NEW_VALUE}@\" $FILENAME"
         run_cmd "grep -E \"^[ $(echo -e '\t')]*${KEY}[ $(echo -e '\t')]*${SEPARATOR}${NEW_VALUE}\" $FILENAME"
@@ -131,10 +194,10 @@ function get_file_attrs
             #echo "File attrs: $f"
             if [ -L "$file" ]; then
                 # symlinks cannot have attr or dir
-                echo "%{prefix}/$f" >> $RESULT_FILE
+                echo "%{prefix}/$f" >> "$RESULT_FILE"
             elif [ -d "$file" ]; then
                 # Is directory
-                echo "%dir %attr(0755, %{owner}, %{user}) \"%{prefix}/$f\"" >> $RESULT_FILE
+                echo "%dir %attr(0755, %{owner}, %{user}) \"%{prefix}/$f\"" >> "$RESULT_FILE"
             elif ! echo "$IGNORE_FILES" | grep "$f" > /dev/null ; then
                 local FILE_ATTR_PREFIX=""
                 if echo "$CONFIG_FILES" | grep "$f" > /dev/null ; then
@@ -150,19 +213,71 @@ function get_file_attrs
 
                 if [ -h "$file" ]; then
                     # Symbolic link: warning: Explicit %attr() mode not applicaple to symlink: /opt/gpudb/lib/libjzmq.so.0
-                    echo "\"%{prefix}/$f\"" >> $RESULT_FILE
+                    echo "\"%{prefix}/$f\"" >> "$RESULT_FILE"
                 elif [ -x "$file" ]; then
                     # Is executable
-                    echo "$FILE_ATTR_PREFIX %attr(0755, %{owner}, %{user}) \"%{prefix}/$f\"" >> $RESULT_FILE
+                    echo "$FILE_ATTR_PREFIX %attr(0755, %{owner}, %{user}) \"%{prefix}/$f\"" >> "$RESULT_FILE"
                 else
                     # Is normal file
-                    echo "$FILE_ATTR_PREFIX %attr(0644, %{owner}, %{user}) \"%{prefix}/$f\"" >> $RESULT_FILE
+                    echo "$FILE_ATTR_PREFIX %attr(0644, %{owner}, %{user}) \"%{prefix}/$f\"" >> "$RESULT_FILE"
                 fi
             fi
         done
 
     popd_cmd
 
+}
+
+# ---------------------------------------------------------------------------
+# Verify that the conf files exist within this distribution.
+
+function verify_conf_files
+{
+    local CONF_FILE="$1"
+    local CONF_FILE_PREFIX="$2"
+    local INSTALL_PATH="$3"
+
+    echo
+    echo "Validating configuration files in '$CONF_FILE' with prefix '${CONF_FILE_PREFIX}' at '${INSTALL_PATH}'..."
+
+    local CONF_FILES=""
+    get_relative_conffiles "CONF_FILES" "$CONF_FILE" "$CONF_FILE_PREFIX"
+
+    local MISSING_FILES=0
+    local F=""
+    for F in $CONF_FILES; do
+        INSTALL_FILE="${INSTALL_PATH}$(echo "$F" | sed "s@^${CONF_FILE_PREFIX}@@g")"
+        if [ ! -f "${INSTALL_FILE}" ]; then
+            echo "Missing configuration file '${INSTALL_FILE}' specified in '${CONF_FILE}'." >&2
+            MISSING_FILES=$((MISSING_FILES+1))
+        fi
+    done
+
+    if [ "$MISSING_FILES" -ne 0 ]; then
+        echo "ERROR: Missing ${MISSING_FILES} files specified in '${CONF_FILE}'." >&2
+        exit 1
+    else
+        echo "All configuration files valid."
+        echo
+    fi
+}
+
+function get_relative_conffiles
+{
+    local OUTPUT_VAR_NAME=$1
+    local CONFFILES_FILE=$2
+    local STRIP_PREFIX="$3"
+
+    if [ ! -f $CONFFILES_FILE ]; then
+        echo "ERROR: conffiles does not exist at ${CONFFILES_FILE}" >&2
+        exit 1
+    fi
+
+    local F=""
+    for F in $(cat $CONFFILES_FILE); do
+        F="$(echo "$F" | sed "s@^${STRIP_PREFIX}@@g")"
+        eval "$OUTPUT_VAR_NAME=\"$F \$$OUTPUT_VAR_NAME\""
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -180,9 +295,130 @@ function get_dependent_libs
     #echo "$EXE_LIBS"
 
     # Trim out the system libs in /usr/lib* and /lib*, easier to do a positive search.
-    local EXE_LIBS=$(echo "$EXE_LIBS" | grep -e "gpudb-core-libs" -e "/home/" -e "/opt/" -e "/usr/local/" | grep -v "opt/sgi")
+    local EXE_LIBS=$(echo "$EXE_LIBS" | grep -e "gpudb" -e "/home/" -e "/opt/" -e "/usr/local/" | grep -v "opt/sgi" | grep -v "/usr/local/nvidia/" | grep -v "libnvidia-ml.so")
 
     eval $OUTPUT_VAR_NAME="'$EXE_LIBS'"
+}
+
+# ---------------------------------------------------------------------------
+# Utilities to update and fix RPath
+
+function find_elf_files
+{
+    local DIR="$1"
+    local ELF_FILES=`find . -type f -exec file {} \; | grep ELF | awk '{print $1}' | sed 's/:.*$//' | sort | uniq`
+    echo "$ELF_FILES"
+}
+
+# Update references to a single folder in the RPath.
+function fix_rpath
+{
+    local RPATH_TO_CHANGE="$1"
+    local RPATH_TO_CHANGE_TO="$2"
+
+    shift
+    shift
+
+    for F in $@; do
+        echo "Checking RPATH for: '$F'"
+
+        # "filename.so: RPATH=/home/blah/blah/install/lib"
+        # NOTE: You cannot combine these two lines into 'local CHRPATH_OUT=...', as local will eat the return code
+        local CHRPATH_OUT
+        CHRPATH_OUT="$(chrpath $F)"
+
+        if [ "$?" == 0 ]; then
+            # Get the first character pos after "... RPATH="
+            local OLD_RPATH=":${CHRPATH_OUT#*=}:"
+            local NEW_RPATH="$(echo "${OLD_RPATH}" | sed "s@:${RPATH_TO_CHANGE}:@:${RPATH_TO_CHANGE_TO}:@g")"
+
+            # Clean up extra '/' and ':'
+            NEW_RPATH="$(echo $NEW_RPATH | sed 's@:[:]*@:@g')"
+            NEW_RPATH="$(echo $NEW_RPATH | sed 's@/[/]*@/@g')"
+
+            NEW_RPATH="$(echo $NEW_RPATH | sed 's@^:@@g')"
+            NEW_RPATH="$(echo $NEW_RPATH | sed 's@:$@@g')"
+            NEW_RPATH="$(echo $NEW_RPATH | sed 's@/$@@g')"
+
+            if [[ "a$OLD_RPATH" != "a$NEW_RPATH" ]]; then
+                echo "Changing rpath for '$F' from '$OLD_RPATH' to '$NEW_RPATH'"
+                # Make sure we can modify it
+                chmod 'u+rw' "$F"
+                chrpath -r "$NEW_RPATH" "$F"
+
+                if [ $? -ne 0 ]; then
+                    echo "ERROR changing rpath in '$F' to '$NEW_RPATH'"
+                    exit 1
+                fi
+
+                echo
+            else
+                echo "NOT changing rpath for $F, it does not point to $RPATH_TO_CHANGE"
+                echo $CHRPATH_OUT
+                echo
+            fi
+        fi
+    done
+}
+
+# Treat a directory as an installation, and edit the RPath of any files therein
+# to relatively point to the <INSTALL_PREFIX>/lib folder.  Also optionally removes a
+# DUMMY_RPATH if one was used to build and is provided.
+function fix_rpaths
+{
+    local INSTALL_PREFIX="$1"
+    local DUMMY_RPATH="$2"
+
+    echo "----------------------------------------------------------------"
+    echo "- fix_rpaths ($INSTALL_PREFIX)"
+    if [ -n "$DUMMY_RPATH" ]; then
+        echo "              DUMMY_RPATH=$DUMMY_RPATH"
+    fi
+    echo "----------------------------------------------------------------"
+
+    if [ -d "$INSTALL_PREFIX/lib" ]; then
+        pushd $INSTALL_PREFIX/lib
+            echo
+            local ELF_FILES=$(find_elf_files .)
+            if [ -n "$DUMMY_RPATH" ]; then
+                fix_rpath "$DUMMY_RPATH" "" $ELF_FILES
+            fi
+
+            for f in $ELF_FILES; do
+                # Make sure sub dirs have RPATH of '${ORIGIN}/../../lib' pointing back to lib dir.
+                local DIR_DEPTH=$(echo $f | grep -o '/' | wc -l)
+
+                if [ $DIR_DEPTH -lt 2 ]; then
+                    fix_rpath "$INSTALL_PREFIX/lib" "\${ORIGIN}" $f
+                else
+                    local DIR_DEPTH_PATH=$(eval printf '../'%.0s {1..$((DIR_DEPTH))})
+                    fix_rpath "$INSTALL_PREFIX/lib" "\${ORIGIN}:\${ORIGIN}/${DIR_DEPTH_PATH}lib" $f
+                fi
+            done
+        popd
+    fi
+
+    if [ -d "$INSTALL_PREFIX/bin" ]; then
+        pushd $INSTALL_PREFIX/bin
+            echo
+            local ELF_FILES=$(find_elf_files .)
+            if [ -n "$DUMMY_RPATH" ]; then
+                fix_rpath "$DUMMY_RPATH" "" $ELF_FILES
+            fi
+            fix_rpath "$INSTALL_PREFIX/lib" "\${ORIGIN}/../lib" $ELF_FILES
+        popd
+    fi
+
+    if [ -d "$INSTALL_PREFIX/sbin" ]; then
+        pushd $INSTALL_PREFIX/sbin
+            echo
+            local ELF_FILES=$(find_elf_files .)
+            if [ -n "$DUMMY_RPATH" ]; then
+                fix_rpath "$DUMMY_RPATH" "" $ELF_FILES
+            fi
+            fix_rpath "$INSTALL_PREFIX/lib" "\${ORIGIN}/../lib" $ELF_FILES
+        popd
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -211,12 +447,20 @@ function fix_python_shebangs
 {
     local DIR="$1"
     pushd_cmd $DIR
-
         for f in `find . -name '*.py'`; do
             fix_python_shebang "$f"
         done
-
     popd_cmd
+
+    if [ -d "$DIR/bin" ]; then
+        pushd_cmd "$DIR/bin"
+            for f in $(ls); do
+                if [ "$(head -c 2 "$f")" = "#!" ]; then
+                    fix_python_shebang "$f"
+                fi
+            done
+        popd_cmd
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -277,7 +521,7 @@ function git_repo_is_not_modified
     # http://stackoverflow.com/questions/5143795/how-can-i-check-in-a-bash-script-if-my-local-git-repo-has-changes
     # and
     # https://git-scm.com/docs/git-update-index
-    git update-index -q --refresh
+    git update-index -q --refresh > /dev/null
     # No local changes && no committed changes that have not yet been pushed (diff upsteam vs HEAD returns no results)
     if git diff-index --quiet HEAD -- && [ -z "$(git log @{u}..)" ] ; then
         return 0
@@ -383,6 +627,43 @@ function get_git_root_dir
         exit 1
     fi
     eval $OUTPUT_VAR_NAME="$GIT_ROOT_DIR_RESULT"
+}
+
+# Gets all RPM dependencies for libraries and executables - used for creating
+# the "requires" statement of an RPM spec file.
+function get_rpm_dependencies
+{
+    local VERBOSE=0
+
+    if [[ "a$1" == "a-v" ]]; then
+        VERBOSE=1
+        shift
+    fi
+
+    local LIB_NAME=$*
+
+    # Only print the rpm name w/o the version so it will work on different distros/version.
+    local RPM_QUERY_FORMAT="--qf %{NAME}\\n"
+
+    # Note that "ldd obj" shows all required dependencies, "readelf -d obj" only direct dependencies.
+
+    # See ldd_used_unused_libs.sh (these two calls should be identical)
+    local ALL_LIBS=$(ldd $LIB_NAME)
+    ALL_LIBS=$(echo "$ALL_LIBS" | awk '($2 == "=>") && ($3 != "not") && (substr($3,1,3) != "(0x") && (substr($0,length,1) != ":") && ($1" "$2" "$3" "$4 != "not a dynamic executable") {print $3}')
+    ALL_LIBS=$(echo "$ALL_LIBS" | sort | uniq)
+
+    #echo "$ALL_LIBS" | awk '{print "A: " $0}'
+
+    if [[ "$VERBOSE" == "0" ]]; then
+        #echo -e "- ALL RPMs $LIB_NAME links to (direct dependencies only)\n"
+        local RPM_FILES=$(for f in $ALL_LIBS; do rpm ${RPM_QUERY_FORMAT} -qf $f; done | sort | uniq)
+        echo "$RPM_FILES" | awk '{print $0}'
+    else
+        #echo -e "- ALL RPMs $LIB_NAME links to (direct dependencies only)\n"
+        # Note: no uniq, since we want to display all the original libs
+        local RPM_FILES=$(for f in $ALL_LIBS; do RPM_NAME=`rpm ${RPM_QUERY_FORMAT} -qf $f`; echo "$RPM_NAME => $f"; done | sort)
+        echo "$RPM_FILES" | awk '{print $0}'
+    fi
 }
 
 # Gets the version stored in the VERSION file of the repository
