@@ -51,28 +51,28 @@ import com.gpudb.protocol.CreateTableMonitorResponse;
 @WritesAttribute(attribute = "mime.type", description = "Sets MIME type to text/csv")
 public class GetKineticaToCSV extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder()
-            .name("Server URL")
+            .name( KineticaConstants.SERVER_URL )
             .description("URL of the GPUdb server")
             .required(true)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
     public static final PropertyDescriptor PROP_SET = new PropertyDescriptor.Builder()
-            .name("Table Name")
+            .name( KineticaConstants.TABLE_NAME )
             .description("Name of the GPUdb table")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
     public static final PropertyDescriptor PROP_OBJECT_MONITOR = new PropertyDescriptor.Builder()
-            .name("Table Monitor URL")
+            .name( KineticaConstants.TABLE_MONITOR_URL )
             .description("URL of the GPUdb table monitor")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
     
     public static final PropertyDescriptor PROP_DELIMITER = new PropertyDescriptor.Builder()
-            .name("Delimiter")
+            .name( KineticaConstants.DELIMITER )
             .description("Delimiter of input data (usually a ',' or '\t' (tab); defaults to '\t' (tab))")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
@@ -80,14 +80,14 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .build();
     
     public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder()
-            .name("Username")
+            .name( KineticaConstants.USERNAME )
             .description("Username to connect to Kinetica")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build(); 
     
     public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
-            .name("Password")
+            .name( KineticaConstants.PASSWORD )
             .description("Password to connect to Kinetica")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
@@ -95,7 +95,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .build();
     
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
-            .name("success")
+            .name( KineticaConstants.SUCCESS )
             .description("All CSV files from the GPUdb set are routed to this relationship")
             .build();
 
@@ -269,6 +269,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
                 printer.flush();
                 writer.flush();
                 out.flush();
+                printer.close();
                 getLogger().info("Got {} record(s) from set {} at {}.", new Object[] { count, set, gpudb.getURL() });
                 
                }

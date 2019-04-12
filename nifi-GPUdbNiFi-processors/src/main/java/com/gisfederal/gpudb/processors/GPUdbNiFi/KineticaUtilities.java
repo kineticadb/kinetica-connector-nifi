@@ -9,18 +9,19 @@ import java.util.TimeZone;
 
 import org.apache.nifi.logging.ComponentLog;
 
+import com.gpudb.ColumnProperty;
 import com.gpudb.GPUdb;
 import com.gpudb.GPUdbException;
+import com.gpudb.Type.Column;
 import com.gpudb.protocol.HasTableResponse;
 
 public class KineticaUtilities {
     
 
-    public static boolean checkForTimeStamp(List<String> columnPropertyList) {
+    public static boolean checkForTimeStamp( Column column) throws Exception {
         boolean isTimeStamp = false;
 
-        if (columnPropertyList.contains("timestamp") || columnPropertyList.contains("Timestamp")
-                || columnPropertyList.contains("TIMESTAMP")) {
+        if ( column.hasProperty( ColumnProperty.TIMESTAMP ) ) {
             isTimeStamp = true;
         }
 

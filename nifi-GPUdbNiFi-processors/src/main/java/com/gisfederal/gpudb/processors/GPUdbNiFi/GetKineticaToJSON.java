@@ -55,35 +55,35 @@ import com.gpudb.protocol.CreateTableMonitorResponse;
 @WritesAttribute(attribute = "mime.type", description = "Sets MIME type to application/json")
 public class GetKineticaToJSON extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder()
-            .name("Server URL")
+            .name( KineticaConstants.SERVER_URL )
             .description("URL of the GPUdb server")
             .required(true)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
     public static final PropertyDescriptor PROP_SET = new PropertyDescriptor.Builder()
-            .name("Table Name")
+            .name( KineticaConstants.TABLE_NAME )
             .description("Name of the GPUdb table")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
     public static final PropertyDescriptor PROP_OBJECT_MONITOR = new PropertyDescriptor.Builder()
-            .name("Table Monitor URL")
+            .name( KineticaConstants.TABLE_MONITOR_URL )
             .description("URL of the GPUdb table monitor")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
     
     public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder()
-            .name("Username")
+            .name( KineticaConstants.USERNAME )
             .description("Username to connect to Kinetica")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build(); 
     
     public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
-            .name("Password")
+            .name( KineticaConstants.PASSWORD )
             .description("Password to connect to Kinetica")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
@@ -91,7 +91,7 @@ public class GetKineticaToJSON extends AbstractProcessor {
             .build();
     
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
-            .name("success")
+            .name( KineticaConstants.SUCCESS )
             .description("All CSV files from the GPUdb set are routed to this relationship")
             .build();
 

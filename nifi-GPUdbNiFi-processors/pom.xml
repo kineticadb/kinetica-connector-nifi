@@ -4,17 +4,17 @@
     <parent>
         <groupId>com.gpudb</groupId>
         <artifactId>GPUdbNiFiConnector</artifactId>
-        <version>1.3.0</version>
+        <version>7.0.2.0</version>
     </parent>
     <artifactId>nifi-GPUdbNiFi-processors</artifactId>
     <packaging>jar</packaging>
     <properties>
-    	<kinetica.version>7.0.0.0</kinetica.version>
+    	<kinetica.version>[7.0.0.0,7.1)</kinetica.version>
     	<nifi.version>1.3.0</nifi.version>
     </properties>
-	<build>
-		<pluginManagement>    
-			<plugins>
+    <build>
+        <pluginManagement>    
+            <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-shade-plugin</artifactId>
@@ -29,46 +29,54 @@
                                 <shadedArtifactAttached>true</shadedArtifactAttached>
                                 <shadedClassifierName>shaded</shadedClassifierName>
                                 <relocations>
-                                  <relocation>
-                                    <pattern>org.apache.avro</pattern>
-                                    <shadedPattern>org.shaded.apache.avro</shadedPattern>
-                                  </relocation>
-                                  <relocation>
-                                    <pattern>org.apache.commons.io</pattern>
-                                    <shadedPattern>org.shaded.apache.commons.io</shadedPattern>
-                                  </relocation>                                  
+                                    <relocation>
+                                        <pattern>org.apache.avro</pattern>
+                                        <shadedPattern>org.shaded.apache.avro</shadedPattern>
+                                    </relocation>
+                                    <relocation>
+                                        <pattern>org.apache.commons.io</pattern>
+                                        <shadedPattern>org.shaded.apache.commons.io</shadedPattern>
+                                    </relocation>                                  
                                 </relocations>
                             </configuration>
                         </execution>
                     </executions>
                 </plugin>            
-                           
-				<plugin>
-					<artifactId>maven-compiler-plugin</artifactId>
-					<version>3.2</version>
-					<configuration>
-						<source>1.7</source>
-						<target>1.7</target>
-					</configuration>
-				</plugin>
-			</plugins>
-		</pluginManagement>
-	</build>
-	<repositories>
-		<repository>
-			<id>gpudb-releases</id>
-			<name>GPUdb Release Nexus</name>
-			<url>http://files.kinetica.com/nexus/content/repositories/releases/</url>
-		</repository>
-		<repository>
-			<id>gpudb-snapshots</id>
-			<name>GPUdb Snapshot Nexus</name>
-			<url>http://files.kinetica.com/nexus/content/repositories/snapshots/</url>
-		</repository>
-	</repositories>
+                
+                <plugin>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.2</version>
+                    <configuration>
+                        <source>1.7</source>
+                        <target>1.7</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration>
+                        <argLine>-Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
+                        <redirectTestOutputToFile>true</redirectTestOutputToFile>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+    <repositories>
+        <repository>
+            <id>gpudb-releases</id>
+            <name>GPUdb Release Nexus</name>
+            <url>http://files.kinetica.com/nexus/content/repositories/releases/</url>
+        </repository>
+        <repository>
+            <id>gpudb-snapshots</id>
+            <name>GPUdb Snapshot Nexus</name>
+            <url>http://files.kinetica.com/nexus/content/repositories/snapshots/</url>
+        </repository>
+    </repositories>
 
     <dependencies>
-         <dependency>
+        <dependency>
             <groupId>com.gpudb</groupId>
             <artifactId>gpudb-api</artifactId>
             <version>${kinetica.version}</version>
@@ -99,6 +107,11 @@
             <artifactId>slf4j-simple</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+	        <groupId>log4j</groupId>
+	        <artifactId>log4j</artifactId>
+	        <version>1.2.17</version>
+	    </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -137,6 +150,6 @@
             <artifactId>gson</artifactId>
             <version>2.2.4</version>
             <type>jar</type>
-        </dependency>        
+        </dependency>
     </dependencies>
 </project>

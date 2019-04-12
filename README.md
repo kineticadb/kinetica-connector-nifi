@@ -26,7 +26,12 @@ connector can be found at:
 Building the Kinetica NiFi Connector
 ------------------------------------
 
-The connector jar can be built with *Maven*.
+The connector jar can be obtained from Kinetica's Maven repositories at
+``http://files.kinetica.com/nexus/index.html#view-repositories;releases~browsestorage``.
+The ``com.gisfederal.gpudb.processors.GPUdbNiFi`` package can be found by
+browsing the ``Releases`` storage directory.
+
+Alternatively, the connector jar can be built with *Maven*.
 
 1. Download the connector source::
 
@@ -42,9 +47,16 @@ The connector jar can be built with *Maven*.
             <version>1.3.0</version>
         </parent>
 
-3. Build the connector jar::
+3. Build the connector jar (skipping tests)::
 
-        $ mvn clean package
+        $ mvn clean package -DskipTests
+
+In order to run the tests as part of the build process, a *Kinetica* instance
+must be available.  The URL to the Kinetica server needs to be passed in::
+
+        $ mvn clean package -Durl=http://<host>:<port>
+
+
 
 
 Installing the Kinetica NiFi Connector into NiFi
