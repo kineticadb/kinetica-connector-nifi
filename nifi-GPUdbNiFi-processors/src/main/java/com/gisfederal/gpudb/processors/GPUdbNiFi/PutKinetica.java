@@ -45,70 +45,72 @@ import com.gpudb.protocol.InsertRecordsRequest;
         + "Batch Size to match.")
 @ReadsAttribute(attribute = "mime.type", description = "Determines MIME type of input file")
 public class PutKinetica extends AbstractProcessor {
-    public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder().name("Server URL")
-            .description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true)
-            .addValidator(StandardValidators.URL_VALIDATOR).build();
+    public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder().name( KineticaConstants.SERVER_URL )
+        .description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true)
+        .addValidator(StandardValidators.URL_VALIDATOR).build();
 
-    public static final PropertyDescriptor PROP_COLLECTION = new PropertyDescriptor.Builder().name("Collection Name")
-            .description("Name of the Kinetica collection").required(false)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor PROP_COLLECTION = new PropertyDescriptor.Builder().name( KineticaConstants.COLLECTION_NAME )
+        .description("Name of the Kinetica collection").required(false)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    public static final PropertyDescriptor PROP_TABLE = new PropertyDescriptor.Builder().name("Table Name")
-            .description("Name of the Kinetica table").required(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor PROP_TABLE = new PropertyDescriptor.Builder().name( KineticaConstants.TABLE_NAME )
+        .description("Name of the Kinetica table").required(true)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    public static final PropertyDescriptor PROP_SCHEMA = new PropertyDescriptor.Builder().name("Schema")
-            .description("Schema of the Kinetica table. Schema not required if table exists in Kinetica already."
-                    + " Example schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data")
-            .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor PROP_SCHEMA = new PropertyDescriptor.Builder().name( KineticaConstants.SCHEMA )
+        .description("Schema of the Kinetica table. Schema not required if table exists in Kinetica already."
+                     + " Example schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data")
+        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name("Batch Size")
-            .description("The maximum number of FlowFiles to process in a single execution. The FlowFiles will be "
-                    + "grouped by table, and a batch insert per table will be performed.")
-            .required(true).addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("500").build();
+    protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name( KineticaConstants.BATCH_SIZE )
+        .description("The maximum number of FlowFiles to process in a single execution. The FlowFiles will be "
+                     + "grouped by table, and a batch insert per table will be performed.")
+        .required(true).addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("500").build();
 
-    public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder().name("Username")
-            .description("Username to connect to Kinetica").required(false)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder().name( KineticaConstants.USERNAME )
+        .description("Username to connect to Kinetica").required(false)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder().name("Password")
-            .description("Password to connect to Kinetica").required(false)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).sensitive(true).build();
+    public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder().name( KineticaConstants.PASSWORD )
+        .description("Password to connect to Kinetica").required(false)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).sensitive(true).build();
 
     protected static final PropertyDescriptor UPDATE_ON_EXISTING_PK = new PropertyDescriptor.Builder()
-            .name("Update on Existing PK")
-            .description(
-                    "If the table has a primary key, then if the value is 'true' then if any of the records being added have the "
-                            + "same primary key as existing records, the existing records are replaced (i.e. *updated*) with the given records. "
-                            + "If 'false' and if the records being added have the same primary key as existing records, the given records with "
-                            + "existing primary keys are ignored (the existing records are left unchanged). It is quite possible that in this "
-                            + "case some of the given records will be inserted and some (those having existing primary keys) will be ignored "
-                            + "(or updated). If the specified table does not have a primary key column then this parameter is ignored. ")
-            .required(true).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("false").build();
+        .name( KineticaConstants.UPDATE_ON_EXISTING_PK )
+        .description(
+                     "If the table has a primary key, then if the value is 'true' then if any of the records being added have the "
+                     + "same primary key as existing records, the existing records are replaced (i.e. *updated*) with the given records. "
+                     + "If 'false' and if the records being added have the same primary key as existing records, the given records with "
+                     + "existing primary keys are ignored (the existing records are left unchanged). It is quite possible that in this "
+                     + "case some of the given records will be inserted and some (those having existing primary keys) will be ignored "
+                     + "(or updated). If the specified table does not have a primary key column then this parameter is ignored. ")
+        .required(true).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("false").build();
 
     protected static final PropertyDescriptor PROP_REPLICATE_TABLE = new PropertyDescriptor.Builder()
-            .name("Replicate Table")
-            .description(
-                    "If the Kinetica table doesn't already exist then it will created by this processor. A value of true indicates that"
-                            + " the table that is created should be replicated.")
-            .required(true).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("false").build();
+        .name( KineticaConstants.REPLICATE_TABLE )
+        .description(
+                     "If the Kinetica table doesn't already exist then it will created by this processor. A value of true indicates that"
+                     + " the table that is created should be replicated.")
+        .required(true).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("false").build();
 
-    public static final PropertyDescriptor PROP_DATE_FORMAT = new PropertyDescriptor.Builder().name("Date Format")
-            .description("Provide the date format used for your datetime values"
-                    + " Example: yyyy/MM/dd HH:mm:ss")
-            .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor PROP_DATE_FORMAT = new PropertyDescriptor.Builder()
+        .name( KineticaConstants.DATE_FORMAT )
+        .description("Provide the date format used for your datetime values"
+                     + " Example: yyyy/MM/dd HH:mm:ss")
+        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder().name("Timezone")
-            .description(
-                    "Provide the timezone the data was created in. If no timezone is set, the current timezone will be used."
-                            + " Example: EST")
-            .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+    public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder()
+        .name( KineticaConstants.TIMEZONE )
+        .description(
+                     "Provide the timezone the data was created in. If no timezone is set, the current timezone will be used."
+                     + " Example: EST")
+        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    public static final Relationship REL_SUCCESS = new Relationship.Builder().name("success")
-            .description("All FlowFiles that are written to Kinetica are routed to this relationship").build();
+    public static final Relationship REL_SUCCESS = new Relationship.Builder().name( KineticaConstants.SUCCESS )
+        .description("All FlowFiles that are written to Kinetica are routed to this relationship").build();
 
-    public static final Relationship REL_FAILURE = new Relationship.Builder().name("failure")
-            .description("All FlowFiles that cannot be written to Kinetica are routed to this relationship").build();
+    public static final Relationship REL_FAILURE = new Relationship.Builder().name( KineticaConstants.FAILURE )
+        .description("All FlowFiles that cannot be written to Kinetica are routed to this relationship").build();
 
     private GPUdb gpudb;
     private String tableName;
@@ -382,7 +384,7 @@ public class PutKinetica extends AbstractProcessor {
                     value = null;
                 }
 
-                boolean timeStamp = KineticaUtilities.checkForTimeStamp(column.getProperties());
+                boolean timeStamp = KineticaUtilities.checkForTimeStamp( column );
 
                 if (timeStamp && value != null) {
                     if (StringUtils.isNumeric(value)) {
