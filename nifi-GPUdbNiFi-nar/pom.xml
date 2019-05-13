@@ -4,16 +4,16 @@
     <parent>
         <groupId>com.gpudb</groupId>
         <artifactId>GPUdbNiFiConnector</artifactId>
-        <version>7.0.2.0</version>
+        <version>7.0.3.0</version>
     </parent>
     <artifactId>nifi-GPUdbNiFi-nar</artifactId>
-    <version>7.0.2.0</version>
+    <version>7.0.3.0</version>
     <packaging>nar</packaging>
     <dependencies>
         <dependency>
             <groupId>com.gpudb</groupId>
             <artifactId>nifi-GPUdbNiFi-processors</artifactId>
-            <version>[7.0.2.0,7.1)</version>
+            <version>[7.0.3.0,7.1)</version>
         </dependency>
     </dependencies>
 </project>

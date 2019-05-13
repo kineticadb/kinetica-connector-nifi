@@ -2,9 +2,15 @@
 
 ## Version 7.0
 
+### Version 7.0.3.0 - 2019-05-03
+
+#### Changed
+-   Updated the Kinetica Java API version to 7.0.3.0 to take advantage of
+    recent changes (support for HA failover for multi-head I/O).
+
 ### Version 7.0.2.0 - 2019-04-12
 
-#### Changes
+#### Changed
 -   Modified the PutKineticaFromFile processor to divert bad records/lines
     from CSV files to a failure relationship.
 
