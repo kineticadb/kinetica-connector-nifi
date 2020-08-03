@@ -8,7 +8,7 @@
     </parent>
     <groupId>com.gpudb</groupId>
     <artifactId>GPUdbNiFiConnector</artifactId>
-    <version>7.0.3.0</version>
+    <version>7.1.0.0</version>
     <packaging>pom</packaging>
     <modules>
         <module>nifi-GPUdbNiFi-processors</module>

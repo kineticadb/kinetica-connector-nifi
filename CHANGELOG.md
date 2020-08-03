@@ -1,5 +1,13 @@
 # GPUdb NiFi Connector Changelog
 
+## Version 7.1
+
+### Version 7.1.0.0 - 2020-07-27
+
+#### Changed
+-   Updated version to 7.1
+
+
 ## Version 7.0
 
 ### Version 7.0.3.0 - 2019-05-03
