@@ -3,10 +3,10 @@ Kinetica NiFi Connector
 
 This project is aimed to make Kinetica both a data source and data sink for NiFi.
 
-The documentation can be found at http://www.kinetica.com/docs/7.0/index.html.
+The documentation can be found at http://www.kinetica.com/docs/7.1/index.html.
 The connector specific documentation can be found at:
 
-* ``http://www.kinetica.com/docs/7.0/connectors/nifi_guide.html``
+* ``http://www.kinetica.com/docs/7.1/connectors/nifi_guide.html``
 
 For changes to the connector API, please refer to CHANGELOG.md.  For changes
 to Kinetica functions, please refer to CHANGELOG-FUNCTIONS.md.

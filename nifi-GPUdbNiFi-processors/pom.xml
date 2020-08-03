@@ -4,12 +4,12 @@
     <parent>
         <groupId>com.gpudb</groupId>
         <artifactId>GPUdbNiFiConnector</artifactId>
-        <version>7.0.3.0</version>
+        <version>7.1.0.0</version>
     </parent>
     <artifactId>nifi-GPUdbNiFi-processors</artifactId>
     <packaging>jar</packaging>
     <properties>
-    	<kinetica.version>[7.0.3.0,7.1.0.0-SNAPSHOT)</kinetica.version>
+    	<kinetica.version>[7.1.0.0,7.2.0.0-SNAPSHOT)</kinetica.version>
     	<nifi.version>1.3.0</nifi.version>
     </properties>
     <build>
