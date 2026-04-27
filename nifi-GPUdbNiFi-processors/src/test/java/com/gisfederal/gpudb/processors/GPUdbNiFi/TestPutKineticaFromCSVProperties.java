@@ -6,16 +6,16 @@ import org.junit.Before;
 import org.junit.Test;
 
 /**
- * Unit tests for PutKineticaFromFile processor property validation.
+ * Unit tests for PutKineticaFromCSV processor property validation.
  * These tests do NOT require a live Kinetica instance.
  */
-public class TestPutKineticaFromFileProperties {
+public class TestPutKineticaFromCSVProperties {
 
     private TestRunner runner;
 
     @Before
     public void setup() {
-        runner = TestRunners.newTestRunner(PutKineticaFromFile.class);
+        runner = TestRunners.newTestRunner(PutKineticaFromCSV.class);
     }
 
     @Test

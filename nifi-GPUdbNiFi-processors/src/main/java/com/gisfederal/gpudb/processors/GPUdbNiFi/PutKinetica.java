@@ -12,6 +12,7 @@ import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
+import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
@@ -131,6 +132,9 @@ public class PutKinetica extends AbstractProcessor {
     private boolean updateOnExistingPk;
     private String dataFormat;
     private String timeZone;
+    private BulkInserter<Record> bulkInserter;
+    private WorkerList workers;
+    private int batchSize;
     private static final String PROCESSOR_NAME = "PutKinetica";
 
     @Override
@@ -298,15 +302,47 @@ public class PutKinetica extends AbstractProcessor {
         } else {
             objectType = null;
         }
+
+        batchSize = context.getProperty(PROP_BATCH_SIZE).asInteger();
+        workers = new WorkerList(gpudb);
+
+        // Pre-create BulkInserter if type is already known
+        if (objectType != null) {
+            bulkInserter = new BulkInserter<>(gpudb, tableName, objectType, batchSize,
+                GPUdb.options(InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK,
+                    updateOnExistingPk ? InsertRecordsRequest.Options.TRUE : InsertRecordsRequest.Options.FALSE),
+                workers);
+        }
+    }
+
+    private synchronized BulkInserter<Record> ensureBulkInserter() throws GPUdbException {
+        if (bulkInserter == null && objectType != null) {
+            bulkInserter = new BulkInserter<>(gpudb, tableName, objectType, batchSize,
+                GPUdb.options(InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK,
+                    updateOnExistingPk ? InsertRecordsRequest.Options.TRUE : InsertRecordsRequest.Options.FALSE),
+                workers);
+        }
+        return bulkInserter;
+    }
+
+    @OnStopped
+    public void onStopped() {
+        if (bulkInserter != null) {
+            try {
+                bulkInserter.flush();
+            } catch (Exception e) {
+                getLogger().warn("Error flushing BulkInserter on stop: " + e.getMessage(), e);
+            }
+            bulkInserter = null;
+        }
+        workers = null;
+        gpudb = null;
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
         final List<FlowFile> successes = new ArrayList<>();
-        final int batchSize = context.getProperty(PROP_BATCH_SIZE).asInteger();
-        BulkInserter<Record> bulkInserter = null;
-        WorkerList workers = null;
 
         // get flowfiles and continue to ad them to the BulkInserter. It will
         // use the batch size to flush them to Kinetica automatically
@@ -318,18 +354,9 @@ public class PutKinetica extends AbstractProcessor {
         }
 
         try {
-            // bulk inserter automatically flushes to Kinetica when the batch
-            // size is met
-            workers = new WorkerList(gpudb);
-            bulkInserter = new BulkInserter<Record>(gpudb, tableName, objectType, batchSize, GPUdb.options(
-                    InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK,
-                    updateOnExistingPk ? InsertRecordsRequest.Options.TRUE : InsertRecordsRequest.Options.FALSE),
-                    workers);
-
+            ensureBulkInserter();
         } catch (Exception e) {
-            getLogger().error( PROCESSOR_NAME + 
-                    " Error: Found failed to create a BulkInserter, please check error logs for more details.",
-                    new Object[] { null, null, null });
+            getLogger().error(PROCESSOR_NAME + " Error: Failed to create BulkInserter: " + e.getMessage());
             return;
         }
 

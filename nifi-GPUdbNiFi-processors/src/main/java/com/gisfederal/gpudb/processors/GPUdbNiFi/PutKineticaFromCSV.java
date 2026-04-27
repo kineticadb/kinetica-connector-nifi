@@ -22,6 +22,7 @@ import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
+import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
@@ -56,7 +57,7 @@ import com.gpudb.protocol.InsertRecordsRequest;
         + "does not hit memory issues parsing the file. Additionally, Nifi runs better if you adjust Concurrent tasks and Run schedule. Example: "
         + " Concurrent tasks to 2 and Run schedule to 2 sec on the Scheduling tab.")
 @ReadsAttribute(attribute = "mime.type", description = "Determines MIME type of input file")
-public class PutKineticaFromFile extends AbstractProcessor {
+public class PutKineticaFromCSV extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder().name( KineticaConstants.SERVER_URL )
         .description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true)
         .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
@@ -174,7 +175,10 @@ public class PutKineticaFromFile extends AbstractProcessor {
     private boolean updateOnExistingPk;
     private String dateFormat;
     private String timeZone;
-    private static final String PROCESSOR_NAME = "PutKineticaFromFile";
+    private BulkInserter<Record> bulkInserter;
+    private WorkerList workers;
+    private int batchSize;
+    private static final String PROCESSOR_NAME = "PutKineticaFromCSV";
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
@@ -347,15 +351,47 @@ public class PutKineticaFromFile extends AbstractProcessor {
         } else {
             objectType = null;
         }
+
+        batchSize = context.getProperty(PROP_BATCH_SIZE).evaluateAttributeExpressions().asInteger();
+        workers = new WorkerList(gpudb);
+
+        // Pre-create BulkInserter if type is already known
+        if (objectType != null) {
+            bulkInserter = new BulkInserter<>(gpudb, tableName, objectType, batchSize,
+                GPUdb.options(InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK,
+                    updateOnExistingPk ? InsertRecordsRequest.Options.TRUE : InsertRecordsRequest.Options.FALSE),
+                workers);
+        }
+    }
+
+    private synchronized BulkInserter<Record> ensureBulkInserter() throws GPUdbException {
+        if (bulkInserter == null && objectType != null) {
+            bulkInserter = new BulkInserter<>(gpudb, tableName, objectType, batchSize,
+                GPUdb.options(InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK,
+                    updateOnExistingPk ? InsertRecordsRequest.Options.TRUE : InsertRecordsRequest.Options.FALSE),
+                workers);
+        }
+        return bulkInserter;
+    }
+
+    @OnStopped
+    public void onStopped() {
+        if (bulkInserter != null) {
+            try {
+                bulkInserter.flush();
+            } catch (Exception e) {
+                getLogger().warn("Error flushing BulkInserter on stop: " + e.getMessage(), e);
+            }
+            bulkInserter = null;
+        }
+        workers = null;
+        gpudb = null;
     }
 
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
         final FlowFile flowFile = session.get();
-        final int batchSize = context.getProperty(PROP_BATCH_SIZE).evaluateAttributeExpressions().asInteger();
         final boolean skipErrors = context.getProperty(PROP_ERROR_HANDLING).asBoolean();
-        final BulkInserter<Record> bulkInserter;
-        final WorkerList workers;
 
         if (flowFile == null) {
             return;
@@ -364,18 +400,13 @@ public class PutKineticaFromFile extends AbstractProcessor {
         try {
             if (!KineticaUtilities.tableExists(gpudb, tableName, getLogger())) {
                 throw new ProcessException(PROCESSOR_NAME + " Error: Table '" + tableName + "' does not exist in Kinetica. "
-                                           + "Please provide a schema or create"
-                                           + " the table prior to loading data." );
+                                           + "Please provide a schema or create the table prior to loading data.");
             }
-            workers = new WorkerList(gpudb);
-            bulkInserter = new BulkInserter<Record>(gpudb, tableName, objectType, batchSize, GPUdb.options(
-                    InsertRecordsRequest.Options.UPDATE_ON_EXISTING_PK,
-                    updateOnExistingPk ? InsertRecordsRequest.Options.TRUE : InsertRecordsRequest.Options.FALSE),
-                    workers);
+            ensureBulkInserter();
         } catch (Exception e) {
-            throw new ProcessException( PROCESSOR_NAME + " Error: Failed to create BulkInserter " + e.getMessage()
-				        + "; for debugging purposes, here is the stack trace:\n"
-					+ KineticaUtilities.convertStacktraceToString(e) );
+            throw new ProcessException(PROCESSOR_NAME + " Error: Failed to create BulkInserter " + e.getMessage()
+                            + "; for debugging purposes, here is the stack trace:\n"
+                            + KineticaUtilities.convertStacktraceToString(e));
         }
         
         // Note: The following are length 1 arrays so that they can be declared

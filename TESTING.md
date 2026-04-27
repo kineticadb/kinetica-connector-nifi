@@ -7,7 +7,7 @@
 | Test Class | Tests | Description |
 |------------|-------|-------------|
 | `TestPutKineticaProperties` | 10 | PutKinetica property validation |
-| `TestPutKineticaFromFileProperties` | 10 | PutKineticaFromFile property validation |
+| `TestPutKineticaFromCSVProperties` | 10 | PutKineticaFromCSV property validation |
 | `TestGetKineticaProperties` | 8 | GetKineticaToJSON/CSV property validation |
 | `TestPutKineticaFromJsonAvroProperties` | 10 | PutKineticaFromJSON/Avro property validation |
 | `TestQueryKineticaProperties` | 19 | QueryKineticaToCSV/JSON/Avro property validation |
@@ -27,7 +27,7 @@ Integration tests **skip automatically** when no Kinetica instance is available.
 
 ```bash
 JAVA_HOME=/path/to/java-21 mvn test -pl nifi-GPUdbNiFi-processors \
-  -Dtest="TestPutKineticaProperties,TestPutKineticaFromFileProperties,TestGetKineticaProperties,TestPutKineticaFromJsonAvroProperties,TestQueryKineticaProperties"
+  -Dtest="TestPutKineticaProperties,TestPutKineticaFromCSVProperties,TestGetKineticaProperties,TestPutKineticaFromJsonAvroProperties,TestQueryKineticaProperties"
 ```
 
 ### All tests (integration tests skip if no server)
@@ -84,7 +84,7 @@ All 10 processors verified in NiFi 2.7.2:
 
 | Processor | Status | Notes |
 |-----------|--------|-------|
-| PutKineticaFromFile (CSV) | ✅ Verified | 3 rows ingested |
+| PutKineticaFromCSV | ✅ Verified | 3 rows ingested |
 | PutKineticaFromJSON | ✅ Verified | 3 rows ingested |
 | PutKineticaFromAvro | ✅ Verified | 3 rows ingested |
 | PutKinetica (attributes) | ✅ Verified | 1 row ingested |

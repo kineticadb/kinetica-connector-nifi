@@ -39,7 +39,7 @@ public class TestPutKineticaFromCSV extends TestBase {
         tablesToClear = new ArrayList<>();
 
         // Get a test runner
-        runner = TestRunners.newTestRunner( com.gisfederal.gpudb.processors.GPUdbNiFi.PutKineticaFromFile.class );
+        runner = TestRunners.newTestRunner( com.gisfederal.gpudb.processors.GPUdbNiFi.PutKineticaFromCSV.class );
 
         // Set the DB related properties
         runner.setProperty( KineticaConstants.SERVER_URL, gpudb.getURL().toString() );

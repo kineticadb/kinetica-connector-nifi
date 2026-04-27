@@ -118,7 +118,7 @@ public class TestKineticaIntegration {
     }
 
     @Test
-    public void testPutKineticaFromFileInsertAndVerify() throws Exception {
+    public void testPutKineticaFromCSVInsertAndVerify() throws Exception {
         // Create a test table
         Type type = new Type(
             new Type.Column("id", Integer.class),
@@ -130,7 +130,7 @@ public class TestKineticaIntegration {
         LOG.info("Created test table: {}", testTableName);
 
         // Set up the processor
-        runner = TestRunners.newTestRunner(PutKineticaFromFile.class);
+        runner = TestRunners.newTestRunner(PutKineticaFromCSV.class);
         runner.setProperty(KineticaConstants.SERVER_URL, gpudb.getURL().toString());
         runner.setProperty(KineticaConstants.TABLE_NAME, testTableName);
         runner.setProperty(KineticaConstants.BATCH_SIZE, "100");
@@ -169,7 +169,7 @@ public class TestKineticaIntegration {
     }
 
     @Test
-    public void testPutKineticaFromFileBadRecordsToFailure() throws Exception {
+    public void testPutKineticaFromCSVBadRecordsToFailure() throws Exception {
         // Create a test table with integer columns
         Type type = new Type(
             new Type.Column("x", Integer.class),
@@ -178,7 +178,7 @@ public class TestKineticaIntegration {
         String typeId = type.create(gpudb);
         gpudb.createTable(testTableName, typeId, null);
 
-        runner = TestRunners.newTestRunner(PutKineticaFromFile.class);
+        runner = TestRunners.newTestRunner(PutKineticaFromCSV.class);
         runner.setProperty(KineticaConstants.SERVER_URL, gpudb.getURL().toString());
         runner.setProperty(KineticaConstants.TABLE_NAME, testTableName);
         runner.setProperty(KineticaConstants.BATCH_SIZE, "100");

@@ -54,7 +54,7 @@ kinetica-connector-nifi/
 | File | Processor |
 |------|-----------|
 | `PutKinetica.java` | Attribute-based ingest |
-| `PutKineticaFromFile.java` | CSV/delimited ingest |
+| `PutKineticaFromCSV.java` | CSV/delimited ingest |
 | `PutKineticaFromJSON.java` | JSON ingest |
 | `PutKineticaFromAvro.java` | Avro ingest |
 | `QueryKineticaToCSV.java` | Query → CSV output |

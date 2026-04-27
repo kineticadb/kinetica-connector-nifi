@@ -20,7 +20,7 @@ Uses the **native GPUdb Java API** with `BulkInserter` for multi-head parallel i
 | Processor | Input Format | Description |
 |-----------|-------------|-------------|
 | **PutKinetica** | FlowFile attributes | Inserts records from FlowFile attributes via BulkInserter |
-| **PutKineticaFromFile** | CSV/delimited | Parses CSV FlowFile content and inserts rows via BulkInserter |
+| **PutKineticaFromCSV** | CSV/delimited | Parses CSV FlowFile content and inserts rows via BulkInserter |
 | **PutKineticaFromJSON** | JSON | Parses JSON array or object and inserts via BulkInserter |
 | **PutKineticaFromAvro** | Avro | Reads Avro container format and inserts via BulkInserter |
 
@@ -97,7 +97,7 @@ All non-sensitive, non-boolean properties support **Expression Language** (`${EN
 | Update on Existing PK | No | `false` | ❌ | Update existing primary key records |
 | Replicate Table | No | `false` | ❌ | Create replicated table |
 
-### PutKineticaFromFile (CSV)
+### PutKineticaFromCSV (CSV)
 
 | Property | Required | Default | EL | Description |
 |----------|----------|---------|-----|-------------|
@@ -167,11 +167,11 @@ All non-sensitive, non-boolean properties support **Expression Language** (`${EN
 ### Ingest CSV
 
 ```
-GenerateFlowFile → PutKineticaFromFile → LogAttribute
+GenerateFlowFile → PutKineticaFromCSV → LogAttribute
 ```
 
 **GenerateFlowFile**: Custom Text = `id,name,value\n1,alpha,1.1\n2,beta,2.2`, MIME Type = `text/csv`
-**PutKineticaFromFile**: Server URL = `http://host:9191`, Table Name = `my_table`, Delimiter = `,`
+**PutKineticaFromCSV**: Server URL = `http://host:9191`, Table Name = `my_table`, Delimiter = `,`
 
 ### Ingest JSON
 

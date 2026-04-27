@@ -13,7 +13,7 @@
 -   **QueryKineticaToAvro**: Queries a Kinetica table or executes SQL, outputs results as Avro with batching
 
 #### Added — Features
--   Expression Language support (ENVIRONMENT scope) on all non-sensitive, non-boolean properties
+-   Expression Language support (FLOWFILE_ATTRIBUTES scope) on all non-sensitive, non-boolean properties
 -   NiFi Parameter Context support (`#{param}`) on all properties
 -   Custom validation on Query processors: exactly one of Table Name or SQL Query must be set
 -   Provenance events on Query processors (RECEIVE)
@@ -31,6 +31,8 @@
 -   **JeroMQ 0.5.4**: Upgraded ZeroMQ library; migrated to `ZContext`/`SocketType.SUB` API
 -   **Commons CSV 1.12.0**: Upgraded CSV parser; migrated to builder pattern (`CSVFormat.RFC4180.builder()`)
 -   **COLLECTION_NAME removed**: Deprecated parameter removed from `createTable()` calls (Kinetica 7.1+)
+-   **Renamed PutKineticaFromFile → PutKineticaFromCSV**: Consistent naming with JSON/Avro processors
+-   **BulkInserter optimization**: BulkInserter and WorkerList now created once in `@OnScheduled` and reused across all `onTrigger` calls; `@OnStopped` flushes remaining records and cleans up resources
 -   Comprehensive `.gitignore`
 
 #### Removed
@@ -60,14 +62,14 @@
 ### Version 7.0.2.0 - 2019-04-12
 
 #### Changed
--   Modified the PutKineticaFromFile processor to divert bad records/lines
+-   Modified the PutKineticaFromCSV (formerly PutKineticaFromFile) processor to divert bad records/lines
     from CSV files to a failure relationship.
 
 ## Version 6.2
 
 ### Version 6.2.0 - 2018-05-16
--   Added the ability to customize the following for the PutKineticaFromFile
-    processor (which loads a CSV file into Kinetica):
+-   Added the ability to customize the following for the PutKineticaFromCSV
+    (formerly PutKineticaFromFile) processor (which loads a CSV file into Kinetica):
     -   Delimiter
     -   Quote character
     -   Escape character
