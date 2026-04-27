@@ -55,7 +55,7 @@ public class PutKineticaFromJSON extends AbstractProcessor {
             .description("URL of the Kinetica server. Example http://172.3.4.19:9191")
             .required(true)
             .addValidator(StandardValidators.URL_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final PropertyDescriptor PROP_TABLE = new PropertyDescriptor.Builder()
@@ -63,7 +63,7 @@ public class PutKineticaFromJSON extends AbstractProcessor {
             .description("Name of the Kinetica table. Use schema-qualified names (e.g. 'myschema.mytable') for schema support.")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final PropertyDescriptor PROP_SCHEMA = new PropertyDescriptor.Builder()
@@ -72,7 +72,7 @@ public class PutKineticaFromJSON extends AbstractProcessor {
                     + " Example schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder()
@@ -81,7 +81,7 @@ public class PutKineticaFromJSON extends AbstractProcessor {
             .required(true)
             .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
             .defaultValue("500")
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder()
@@ -89,7 +89,7 @@ public class PutKineticaFromJSON extends AbstractProcessor {
             .description("Username to connect to Kinetica")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
@@ -124,7 +124,7 @@ public class PutKineticaFromJSON extends AbstractProcessor {
             .description("Provide the date format used for your datetime values. Example: yyyy/MM/dd HH:mm:ss")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder()
@@ -132,7 +132,7 @@ public class PutKineticaFromJSON extends AbstractProcessor {
             .description("Provide the timezone the data was created in. If no timezone is set, the current timezone will be used. Example: EST")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final Relationship REL_SUCCESS = new Relationship.Builder()

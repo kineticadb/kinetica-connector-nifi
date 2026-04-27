@@ -58,7 +58,7 @@ public class GetKineticaToAvro extends AbstractProcessor {
             .name(KineticaConstants.SERVER_URL)
             .description("URL of the Kinetica server")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
@@ -66,7 +66,7 @@ public class GetKineticaToAvro extends AbstractProcessor {
             .name(KineticaConstants.TABLE_NAME)
             .description("Name of the Kinetica table to monitor")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -74,7 +74,7 @@ public class GetKineticaToAvro extends AbstractProcessor {
             .name(KineticaConstants.TABLE_MONITOR_URL)
             .description("URL of the Kinetica ZeroMQ table monitor endpoint")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -82,7 +82,7 @@ public class GetKineticaToAvro extends AbstractProcessor {
             .name(KineticaConstants.USERNAME)
             .description("Username to connect to Kinetica")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 

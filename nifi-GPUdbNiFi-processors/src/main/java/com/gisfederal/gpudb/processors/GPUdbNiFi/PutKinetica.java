@@ -48,36 +48,36 @@ import com.gpudb.protocol.InsertRecordsRequest;
 public class PutKinetica extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder().name( KineticaConstants.SERVER_URL )
         .description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true)
-        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.URL_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_COLLECTION = new PropertyDescriptor.Builder().name( KineticaConstants.COLLECTION_NAME )
         .description("Deprecated in Kinetica 7.1+. Use schema-qualified table names instead (e.g. 'myschema.mytable'). This property is ignored.")
         .required(false)
-        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_TABLE = new PropertyDescriptor.Builder().name( KineticaConstants.TABLE_NAME )
         .description("Name of the Kinetica table. Use schema-qualified names (e.g. 'myschema.mytable') for schema support.")
         .required(true)
-        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_SCHEMA = new PropertyDescriptor.Builder().name( KineticaConstants.SCHEMA )
         .description("Schema of the Kinetica table. Schema not required if table exists in Kinetica already."
                      + " Example schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data")
-        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name( KineticaConstants.BATCH_SIZE )
         .description("The maximum number of FlowFiles to process in a single execution. The FlowFiles will be "
                      + "grouped by table, and a batch insert per table will be performed.")
-        .required(true).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .required(true).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("500").build();
 
     public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder().name( KineticaConstants.USERNAME )
         .description("Username to connect to Kinetica").required(false)
-        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder().name( KineticaConstants.PASSWORD )
@@ -106,7 +106,7 @@ public class PutKinetica extends AbstractProcessor {
         .name( KineticaConstants.DATE_FORMAT )
         .description("Provide the date format used for your datetime values"
                      + " Example: yyyy/MM/dd HH:mm:ss")
-        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder()
@@ -114,7 +114,7 @@ public class PutKinetica extends AbstractProcessor {
         .description(
                      "Provide the timezone the data was created in. If no timezone is set, the current timezone will be used."
                      + " Example: EST")
-        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final Relationship REL_SUCCESS = new Relationship.Builder().name( KineticaConstants.SUCCESS )

@@ -55,7 +55,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.SERVER_URL )
             .description("URL of the GPUdb server")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
@@ -63,7 +63,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.TABLE_NAME )
             .description("Name of the GPUdb table")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -71,7 +71,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.TABLE_MONITOR_URL )
             .description("URL of the GPUdb table monitor")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
     
@@ -79,7 +79,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.DELIMITER )
             .description("Delimiter of input data (usually a ',' or '\t' (tab); defaults to '\t' (tab))")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .defaultValue("\t")
             .build();
@@ -88,7 +88,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.USERNAME )
             .description("Username to connect to Kinetica")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build(); 
     

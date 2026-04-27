@@ -59,7 +59,7 @@ public class QueryKineticaToJSON extends AbstractProcessor {
             .name(KineticaConstants.SERVER_URL)
             .description("URL of the Kinetica server")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
@@ -67,7 +67,7 @@ public class QueryKineticaToJSON extends AbstractProcessor {
             .name(KineticaConstants.TABLE_NAME)
             .description("Full table name (e.g. demo.mytable)")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -75,7 +75,7 @@ public class QueryKineticaToJSON extends AbstractProcessor {
             .name(KineticaConstants.SQL_QUERY)
             .description("Custom SQL query (e.g. SELECT * FROM demo.mytable WHERE id > 100)")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -84,7 +84,7 @@ public class QueryKineticaToJSON extends AbstractProcessor {
             .description("Number of records per FlowFile batch")
             .required(true)
             .defaultValue("10000")
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
             .build();
 
@@ -92,7 +92,7 @@ public class QueryKineticaToJSON extends AbstractProcessor {
             .name(KineticaConstants.USERNAME)
             .description("Username to connect to Kinetica")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 

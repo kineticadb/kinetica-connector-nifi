@@ -59,7 +59,7 @@ public class GetKineticaToJSON extends AbstractProcessor {
             .name( KineticaConstants.SERVER_URL )
             .description("URL of the GPUdb server")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
@@ -67,7 +67,7 @@ public class GetKineticaToJSON extends AbstractProcessor {
             .name( KineticaConstants.TABLE_NAME )
             .description("Name of the GPUdb table")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -75,7 +75,7 @@ public class GetKineticaToJSON extends AbstractProcessor {
             .name( KineticaConstants.TABLE_MONITOR_URL )
             .description("URL of the GPUdb table monitor")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
     
@@ -83,7 +83,7 @@ public class GetKineticaToJSON extends AbstractProcessor {
             .name( KineticaConstants.USERNAME )
             .description("Username to connect to Kinetica")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build(); 
     
