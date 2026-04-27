@@ -13,6 +13,11 @@
 -   **QueryKineticaToAvro**: Queries a Kinetica table or executes SQL, outputs results as Avro with batching
 
 #### Added — Features
+-   **Avro Schema property** on all Put processors for automatic table creation from Avro JSON schema
+    -   Supports full Avro-to-Kinetica type mapping: string, int, long, float, double, boolean→int8, bytes, timestamp, date, time, decimal
+    -   Nullable detection from Avro union types (`["null", "type"]`)
+    -   Logical type support: `timestamp-millis`, `timestamp-micros`, `date`, `time-millis`, `time-micros`, `decimal`
+    -   Resolution priority: existing table → pipe-delimited Schema → Avro Schema → fallback
 -   Expression Language support (FLOWFILE_ATTRIBUTES scope) on all non-sensitive, non-boolean properties
 -   NiFi Parameter Context support (`#{param}`) on all properties
 -   Custom validation on Query processors: exactly one of Table Name or SQL Query must be set

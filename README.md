@@ -90,7 +90,8 @@ All non-sensitive, non-boolean properties support **Expression Language** (`${EN
 |----------|----------|---------|-----|-------------|
 | Server URL | Yes | — | ✅ | Kinetica server URL (e.g. `http://host:9191`) |
 | Table Name | Yes | — | ✅ | Target table name |
-| Schema | No | — | ✅ | Table schema definition (`col|Type|subtype,...`) |
+| Schema | No | — | ✅ | Table schema definition (`col\|Type\|subtype,...`) |
+| Avro Schema | No | — | ✅ | Avro JSON schema for auto table creation (see below) |
 | Batch Size | No | `100` | ✅ | Records per batch |
 | Username | No | — | ✅ | Kinetica username |
 | Password | No | — | 🔒 | Kinetica password (sensitive) |
@@ -103,6 +104,8 @@ All non-sensitive, non-boolean properties support **Expression Language** (`${EN
 |----------|----------|---------|-----|-------------|
 | Server URL | Yes | — | ✅ | Kinetica server URL |
 | Table Name | Yes | — | ✅ | Target table name |
+| Schema | No | — | ✅ | Table schema definition (`col\|Type\|subtype,...`) |
+| Avro Schema | No | — | ✅ | Avro JSON schema for auto table creation |
 | Batch Size | No | `100` | ✅ | Records per batch |
 | Delimiter | No | `,` | ✅ | CSV field delimiter |
 | Quote Character | No | `"` | ✅ | CSV quote character |
@@ -119,6 +122,8 @@ All non-sensitive, non-boolean properties support **Expression Language** (`${EN
 |----------|----------|---------|-----|-------------|
 | Server URL | Yes | — | ✅ | Kinetica server URL |
 | Table Name | Yes | — | ✅ | Target table name |
+| Schema | No | — | ✅ | Table schema definition (`col\|Type\|subtype,...`) |
+| Avro Schema | No | — | ✅ | Avro JSON schema for auto table creation |
 | Batch Size | No | `100` | ✅ | Records per batch |
 | Username | No | — | ✅ | Kinetica username |
 | Password | No | — | 🔒 | Kinetica password (sensitive) |
@@ -131,6 +136,8 @@ All non-sensitive, non-boolean properties support **Expression Language** (`${EN
 |----------|----------|---------|-----|-------------|
 | Server URL | Yes | — | ✅ | Kinetica server URL |
 | Table Name | Yes | — | ✅ | Target table name |
+| Schema | No | — | ✅ | Table schema definition (`col\|Type\|subtype,...`) |
+| Avro Schema | No | — | ✅ | Avro JSON schema for auto table creation |
 | Batch Size | No | `100` | ✅ | Records per batch |
 | Username | No | — | ✅ | Kinetica username |
 | Password | No | — | 🔒 | Kinetica password (sensitive) |
@@ -161,6 +168,51 @@ All non-sensitive, non-boolean properties support **Expression Language** (`${EN
 | Username | No | Kinetica username |
 | Password | No | Kinetica password (sensitive) |
 | Delimiter | No | CSV delimiter (GetKineticaToCSV only) |
+
+## Avro Schema for Auto Table Creation
+
+All Put processors accept an **Avro Schema** property (standard Avro JSON format). When the target table does not exist, the processor can auto-create it using the Avro schema to determine column names, types, and properties.
+
+**Resolution priority** (first match wins):
+1. Table already exists in Kinetica → use existing schema
+2. Pipe-delimited `Schema` property → create table from `col|Type|subtype,...`
+3. `Avro Schema` property → create table from Avro JSON schema
+4. None provided → attempt column matching from data
+
+**Avro → Kinetica type mapping:**
+
+| Avro Type | Logical Type | Kinetica Type | Column Properties |
+|-----------|-------------|---------------|-------------------|
+| `string` | — | String | DATA |
+| `int` | — | Integer | DATA |
+| `long` | — | Long | DATA |
+| `float` | — | Float | DATA |
+| `double` | — | Double | DATA |
+| `boolean` | — | Integer | DATA, INT8 |
+| `bytes`/`fixed` | — | ByteBuffer | DATA |
+| `long` | `timestamp-millis`/`timestamp-micros` | Long | DATA, TIMESTAMP |
+| `int` | `date` | String | DATA, DATE |
+| `int`/`long` | `time-millis`/`time-micros` | String | DATA, TIME |
+| `bytes` | `decimal` | String | DATA, DECIMAL |
+| `["null", X]` | — | *(resolved X)* | + NULLABLE |
+| `enum` | — | String | DATA |
+
+**Example Avro Schema** (set in the "Avro Schema" property):
+```json
+{
+  "name": "my_table",
+  "type": "record",
+  "fields": [
+    {"name": "id", "type": "int"},
+    {"name": "name", "type": ["null", "string"], "default": null},
+    {"name": "value", "type": ["null", "double"], "default": null},
+    {"name": "created_at", "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}], "default": null},
+    {"name": "active", "type": "boolean"}
+  ]
+}
+```
+
+This creates a Kinetica table with columns: `id` (Integer), `name` (String, nullable), `value` (Double, nullable), `created_at` (Long, timestamp, nullable), `active` (Integer, int8).
 
 ## Example NiFi Flows
 
