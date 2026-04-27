@@ -16,6 +16,8 @@ public final class KineticaConstants {
 
     public static final String SCHEMA = "Schema";
 
+    public static final String AVRO_SCHEMA = "Avro Schema";
+
     public static final String DELIMITER = "Delimiter";
 
     public static final String ESCAPE_CHARACTER = "Escape Character";
@@ -32,9 +34,14 @@ public final class KineticaConstants {
 
     public static final String PASSWORD = "Password";
 
+    public static final String SQL_QUERY = "SQL Query";
     public static final String UPDATE_ON_EXISTING_PK = "Update on Existing PK";
 
     public static final String REPLICATE_TABLE = "Replicate Table";
+
+    public static final String DISABLE_AUTO_DISCOVERY = "Disable Auto Discovery";
+
+    public static final String DISABLE_FAILOVER = "Disable Failover";
 
     public static final String DATE_FORMAT = "Date Format";
 

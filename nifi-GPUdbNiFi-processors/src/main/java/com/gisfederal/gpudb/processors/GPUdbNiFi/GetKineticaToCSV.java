@@ -23,6 +23,7 @@ import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnUnscheduled;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
 import org.apache.nifi.processor.AbstractProcessor;
@@ -33,10 +34,10 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
+import org.zeromq.SocketType;
+import org.zeromq.ZContext;
 import org.zeromq.ZFrame;
 import org.zeromq.ZMQ;
-import org.zeromq.ZMQ.Context;
-import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
 
 import com.gpudb.Avro;
@@ -54,6 +55,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.SERVER_URL )
             .description("URL of the GPUdb server")
             .required(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
@@ -61,6 +63,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.TABLE_NAME )
             .description("Name of the GPUdb table")
             .required(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -68,6 +71,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.TABLE_MONITOR_URL )
             .description("URL of the GPUdb table monitor")
             .required(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
     
@@ -75,6 +79,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.DELIMITER )
             .description("Delimiter of input data (usually a ',' or '\t' (tab); defaults to '\t' (tab))")
             .required(false)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .defaultValue("\t")
             .build();
@@ -83,6 +88,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .name( KineticaConstants.USERNAME )
             .description("Username to connect to Kinetica")
             .required(false)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build(); 
     
@@ -92,6 +98,22 @@ public class GetKineticaToCSV extends AbstractProcessor {
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .sensitive(true)
+            .build();
+
+    public static final PropertyDescriptor PROP_DISABLE_AUTO_DISCOVERY = new PropertyDescriptor.Builder()
+            .name(KineticaConstants.DISABLE_AUTO_DISCOVERY)
+            .description("Disable automatic cluster discovery. Set to true when connecting through a proxy or load balancer where internal cluster IPs are not reachable.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .build();
+
+    public static final PropertyDescriptor PROP_DISABLE_FAILOVER = new PropertyDescriptor.Builder()
+            .name(KineticaConstants.DISABLE_FAILOVER)
+            .description("Disable automatic failover to other cluster nodes. Set to true when using a single-endpoint proxy.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
             .build();
     
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
@@ -117,6 +139,8 @@ public class GetKineticaToCSV extends AbstractProcessor {
         descriptors.add(PROP_DELIMITER);   
         descriptors.add(PROP_USERNAME);
         descriptors.add(PROP_PASSWORD);
+        descriptors.add(PROP_DISABLE_AUTO_DISCOVERY);
+        descriptors.add(PROP_DISABLE_FAILOVER);
         
         this.descriptors = Collections.unmodifiableList(descriptors);
 
@@ -139,14 +163,20 @@ public class GetKineticaToCSV extends AbstractProcessor {
     public void onScheduled(final ProcessContext context) throws GPUdbException {
 
         Options option = new Options();
-        if (context.getProperty(PROP_USERNAME).getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
-            option.setUsername(context.getProperty(PROP_USERNAME).getValue());
+        if (context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
+            option.setUsername(context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue());
             option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
         }
-        gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue(), option);
+        if (context.getProperty(PROP_DISABLE_AUTO_DISCOVERY).asBoolean()) {
+            option.setDisableAutoDiscovery(true);
+        }
+        if (context.getProperty(PROP_DISABLE_FAILOVER).asBoolean()) {
+            option.setDisableFailover(true);
+        }
+        gpudb = new GPUdb(context.getProperty(PROP_SERVER).evaluateAttributeExpressions().getValue(), option);
         
-        set = context.getProperty(PROP_SET).getValue();
-        delimiter = context.getProperty(PROP_DELIMITER).getValue().charAt(0);
+        set = context.getProperty(PROP_SET).evaluateAttributeExpressions().getValue();
+        delimiter = context.getProperty(PROP_DELIMITER).evaluateAttributeExpressions().getValue().charAt(0);
         objectType = Type.fromTable(gpudb, set);
         queue = new ConcurrentLinkedQueue<>();
 
@@ -158,8 +188,9 @@ public class GetKineticaToCSV extends AbstractProcessor {
 
                     String topicId = response.getTopicId();
 
-                    try (Context zmqContext = ZMQ.context(1); Socket subscriber = zmqContext.socket(ZMQ.SUB)) {
-                        subscriber.connect(context.getProperty(PROP_OBJECT_MONITOR).getValue());
+                    try (ZContext zmqContext = new ZContext(1)) {
+                        ZMQ.Socket subscriber = zmqContext.createSocket(SocketType.SUB);
+                        subscriber.connect(context.getProperty(PROP_OBJECT_MONITOR).evaluateAttributeExpressions().getValue());
                         subscriber.subscribe(topicId.getBytes());
                         subscriber.setReceiveTimeOut(1000);
 
@@ -186,7 +217,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
                         gpudb.clearTableMonitor(topicId, null);
                     }
                 } catch (Exception ex) {
-                    getLogger().error("Unable to get data from {}", new Object[] { context.getProperty(PROP_OBJECT_MONITOR).getValue() }, ex);
+                    getLogger().error("Unable to get data from {}", new Object[] { context.getProperty(PROP_OBJECT_MONITOR).evaluateAttributeExpressions().getValue() }, ex);
                 }
             }
         });
@@ -226,7 +257,7 @@ public class GetKineticaToCSV extends AbstractProcessor {
             @Override
             public void process(OutputStream out) throws IOException {
                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out))) {
-                CSVPrinter printer = new CSVPrinter(writer, CSVFormat.RFC4180.withDelimiter(delimiter));
+                CSVPrinter printer = new CSVPrinter(writer, CSVFormat.RFC4180.builder().setDelimiter(delimiter).build());
                        
                 ArrayList<String> fields = new ArrayList<>();
 

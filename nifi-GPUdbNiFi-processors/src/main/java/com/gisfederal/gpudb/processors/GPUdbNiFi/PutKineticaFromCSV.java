@@ -1,15 +1,25 @@
 package com.gisfederal.gpudb.processors.GPUdbNiFi;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.avro.Schema;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.nifi.annotation.behavior.ReadsAttribute;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
@@ -25,6 +35,8 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
+import org.apache.nifi.processor.io.InputStreamCallback;
+import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
 import com.gpudb.BulkInserter;
@@ -41,16 +53,15 @@ import com.gpudb.protocol.CreateTableRequest;
 import com.gpudb.protocol.HasTableResponse;
 import com.gpudb.protocol.InsertRecordsRequest;
 
-@Tags({ "Kinetica", "add", "bulkadd", "put" })
-@CapabilityDescription("Bulkloads the contents of FlowFiles to Kinetica in batch intervals (Batch Size setting). Each FlowFile must contain "
-        + "attributes that match your Schema definition. "
+@Tags({ "Kinetica", "add", "bulkadd", "put", "csv", "delimited", "file" })
+@CapabilityDescription("Bulkloads the contents of a delimited file (tab, comma, pipe, etc) to Kinetica. Each file must contain the exact columns as defined in the Schema definition. "
         + "Example: Given this schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data, "
-        + "this processor would expect attributes of x, y, TIMESTAMP, TEXT and AUTHOR in the FlowFile (null or blank values are okay). Case sensitivity "
-        + "of the column names matters. "
-        + "It is important to set the Batch Size to meet your througput needs. If you are ingesting 10K tuples a second, you will need to set your "
-        + "Batch Size to match.")
+        + "this processor would expect columns of x, y, TIMESTAMP, TEXT and AUTHOR in the same order in the file (null or blank values are okay). "
+        + "This processor will ignore the header record of the file. For best results, chunk your file in to 1M rows at a time, so NiFi "
+        + "does not hit memory issues parsing the file. Additionally, Nifi runs better if you adjust Concurrent tasks and Run schedule. Example: "
+        + " Concurrent tasks to 2 and Run schedule to 2 sec on the Scheduling tab.")
 @ReadsAttribute(attribute = "mime.type", description = "Determines MIME type of input file")
-public class PutKinetica extends AbstractProcessor {
+public class PutKineticaFromCSV extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder().name( KineticaConstants.SERVER_URL )
         .description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true)
         .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
@@ -85,11 +96,40 @@ public class PutKinetica extends AbstractProcessor {
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
         .build();
 
-    protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name( KineticaConstants.BATCH_SIZE )
-        .description("The maximum number of FlowFiles to process in a single execution. The FlowFiles will be "
-                     + "grouped by table, and a batch insert per table will be performed.")
+    public static final PropertyDescriptor PROP_DELIMITER = new PropertyDescriptor.Builder().name( KineticaConstants.DELIMITER )
+        .description("Delimiter of CSV input data (usually a ',' or '\t' (tab); defaults to ',' (comma))")
         .required(true).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue(",").build();
+
+    public static final PropertyDescriptor PROP_ESCAPE_CHAR = new PropertyDescriptor.Builder().name( KineticaConstants.ESCAPE_CHARACTER )
+        .description("Escape character for the CSV input data (usually a '\' or '\"' (double quote); defaults to '\"' (double quote))")
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue("\"").build();
+
+    public static final PropertyDescriptor PROP_QUOTE_CHAR = new PropertyDescriptor.Builder().name( KineticaConstants.QUOTE_CHARACTER )
+        .description("Quote character for the CSV input data (usually a '\"'(double quote); defaults to '\"' (double quote)). "
+                     + "When empty, no quote character is used.")
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
+        .addValidator( new StandardValidators.StringLengthValidator(0, 1)).defaultValue("\"").build();
+
+    protected static final PropertyDescriptor PROP_HAS_HEADER = new PropertyDescriptor.Builder()
+        .name( KineticaConstants.FILE_HAS_HEADER )
+        .description(
+                     "If true, then the processor will treat the first line of the file as a header line. "
+                     + "If false, the first line will be treated like a record. The default is 'true'.")
+        .required(false).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("true").build();
+
+    protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name( KineticaConstants.BATCH_SIZE )
+        .description("Batch size of bulk load to Kinetica.").required(true)
+        .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("500").build();
+
+    protected static final PropertyDescriptor PROP_ERROR_HANDLING = new PropertyDescriptor.Builder()
+        .name( KineticaConstants.SKIP_ERRORS )
+        .description(
+                     "Value of true means skip any errors and keep processing. Value of false means stop all processing when an error "
+                     + "occurs in a file.")
+        .required(true).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("true").build();
 
     public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder().name( KineticaConstants.USERNAME )
         .description("Username to connect to Kinetica").required(false)
@@ -134,15 +174,13 @@ public class PutKinetica extends AbstractProcessor {
                      + " the table that is created should be replicated.")
         .required(true).addValidator(StandardValidators.BOOLEAN_VALIDATOR).defaultValue("false").build();
 
-    public static final PropertyDescriptor PROP_DATE_FORMAT = new PropertyDescriptor.Builder()
-        .name( KineticaConstants.DATE_FORMAT )
+    public static final PropertyDescriptor PROP_DATE_FORMAT = new PropertyDescriptor.Builder().name( KineticaConstants.DATE_FORMAT )
         .description("Provide the date format used for your datetime values"
                      + " Example: yyyy/MM/dd HH:mm:ss")
         .required(false).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
-    public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder()
-        .name( KineticaConstants.TIMEZONE )
+    public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder().name( KineticaConstants.TIMEZONE )
         .description(
                      "Provide the timezone the data was created in. If no timezone is set, the current timezone will be used."
                      + " Example: EST")
@@ -160,38 +198,48 @@ public class PutKinetica extends AbstractProcessor {
     public Type objectType;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
+    private char delimiter;
+    private char escape;
+    private boolean isEmptyQuote;
+    private char quote;
+    private boolean hasHeader;
     private boolean updateOnExistingPk;
-    private String dataFormat;
+    private String dateFormat;
     private String timeZone;
     private BulkInserter<Record> bulkInserter;
     private WorkerList workers;
     private int batchSize;
-    private static final String PROCESSOR_NAME = "PutKinetica";
+    private static final String PROCESSOR_NAME = "PutKineticaFromCSV";
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
-        final List<PropertyDescriptor> descriptorList = new ArrayList<>();
-        descriptorList.add(PROP_SERVER);
-        descriptorList.add(PROP_COLLECTION);
-        descriptorList.add(PROP_TABLE);
-        descriptorList.add(PROP_SCHEMA);
-        descriptorList.add(PROP_AVRO_SCHEMA);
-        descriptorList.add(PROP_BATCH_SIZE);
-        descriptorList.add(PROP_USERNAME);
-        descriptorList.add(PROP_PASSWORD);
-        descriptorList.add(PROP_DISABLE_AUTO_DISCOVERY);
-        descriptorList.add(PROP_DISABLE_FAILOVER);
-        descriptorList.add(UPDATE_ON_EXISTING_PK);
-        descriptorList.add(PROP_REPLICATE_TABLE);
-        descriptorList.add(PROP_DATE_FORMAT);
-        descriptorList.add(PROP_TIMEZONE);
+        final List<PropertyDescriptor> descriptors = new ArrayList<>();
+        descriptors.add(PROP_SERVER);
+        descriptors.add(PROP_COLLECTION);
+        descriptors.add(PROP_TABLE);
+        descriptors.add(PROP_SCHEMA);
+        descriptors.add(PROP_AVRO_SCHEMA);
+        descriptors.add(PROP_DELIMITER);
+        descriptors.add(PROP_ESCAPE_CHAR);
+        descriptors.add(PROP_QUOTE_CHAR);
+        descriptors.add(PROP_HAS_HEADER);
+        descriptors.add(PROP_BATCH_SIZE);
+        descriptors.add(PROP_ERROR_HANDLING);
+        descriptors.add(PROP_USERNAME);
+        descriptors.add(PROP_PASSWORD);
+        descriptors.add(PROP_DISABLE_AUTO_DISCOVERY);
+        descriptors.add(PROP_DISABLE_FAILOVER);
+        descriptors.add(UPDATE_ON_EXISTING_PK);
+        descriptors.add(PROP_REPLICATE_TABLE);
+        descriptors.add(PROP_DATE_FORMAT);
+        descriptors.add(PROP_TIMEZONE);
 
-        this.descriptors = Collections.unmodifiableList(descriptorList);
+        this.descriptors = Collections.unmodifiableList(descriptors);
 
-        final Set<Relationship> relationshipList = new HashSet<>();
-        relationshipList.add(REL_SUCCESS);
-        relationshipList.add(REL_FAILURE);
-        this.relationships = Collections.unmodifiableSet(relationshipList);
+        final Set<Relationship> relationships = new HashSet<>();
+        relationships.add(REL_SUCCESS);
+        relationships.add(REL_FAILURE);
+        this.relationships = Collections.unmodifiableSet(relationships);
     }
 
     @Override
@@ -205,7 +253,7 @@ public class PutKinetica extends AbstractProcessor {
     }
 
     private Type createTable(ProcessContext context, String schemaStr) throws GPUdbException {
-        getLogger().debug(PROCESSOR_NAME + " createTable:" + tableName + ", schemaStr:" + schemaStr);
+        getLogger().info(PROCESSOR_NAME + " created table in Kinetica:" + tableName + ", schemaStr:" + schemaStr);
         HasTableResponse response = gpudb.hasTable(tableName, null);
         if (response.getTableExists()) {
             return (null);
@@ -217,7 +265,8 @@ public class PutKinetica extends AbstractProcessor {
             String[] split = fieldStr.split("\\|", -1);
             String name = split[0];
             Class<?> type;
-            getLogger().debug(PROCESSOR_NAME + " field name:" + name + ", type:" + split[1].toLowerCase());
+            getLogger().info(PROCESSOR_NAME + ": Field name '" + name + "', type '" + split[1].toLowerCase()
+                             + "'");
             if (split.length > 1) {
                 switch (split[1].toLowerCase()) {
                 case "double":
@@ -276,10 +325,9 @@ public class PutKinetica extends AbstractProcessor {
                     annotations.add(annotation);
                 }
             }
-
             attributes.add(new Column(name, type, annotations));
         }
-        getLogger().debug(PROCESSOR_NAME + " created type:" + attributes);
+        getLogger().info(PROCESSOR_NAME + ": creating Kinetica type " + attributes);
         Type type = new Type("", attributes);
 
         String typeId = type.create(gpudb);
@@ -459,23 +507,24 @@ public class PutKinetica extends AbstractProcessor {
         if (context.getProperty(PROP_DISABLE_FAILOVER).asBoolean()) {
             option.setDisableFailover(true);
         }
+        // Create a connection to the Kinetica server
         gpudb = new GPUdb(context.getProperty(PROP_SERVER).evaluateAttributeExpressions().getValue(), option);
+
+        // Process the configuration options
         tableName = context.getProperty(PROP_TABLE).evaluateAttributeExpressions().getValue();
+        delimiter = context.getProperty(PROP_DELIMITER).evaluateAttributeExpressions().getValue().charAt(0);
+        escape    = context.getProperty(PROP_ESCAPE_CHAR).evaluateAttributeExpressions().getValue().charAt(0);
+        String quote_char = context.getProperty(PROP_QUOTE_CHAR).evaluateAttributeExpressions().getValue();
+        isEmptyQuote = quote_char.isEmpty();
+        quote     = isEmptyQuote ? '"' : context.getProperty(PROP_QUOTE_CHAR).evaluateAttributeExpressions().getValue().charAt(0);
+        hasHeader = context.getProperty(PROP_HAS_HEADER).asBoolean().booleanValue();
         updateOnExistingPk = context.getProperty(UPDATE_ON_EXISTING_PK).asBoolean().booleanValue();
-        dataFormat = context.getProperty(PROP_DATE_FORMAT).evaluateAttributeExpressions().getValue();
+        dateFormat = context.getProperty(PROP_DATE_FORMAT).evaluateAttributeExpressions().getValue();
         timeZone = context.getProperty(PROP_TIMEZONE).evaluateAttributeExpressions().getValue();
 
-        HasTableResponse response;
-
-        try {
-            response = gpudb.hasTable(tableName, null);
-        } catch (GPUdbException ex) {
-            getLogger().error(PROCESSOR_NAME + " Error: Failed hasTable, exception:" + ex.getMessage());
-            response = null;
-        }
-
-        if ((response != null) && (response.getTableExists())) {
-            getLogger().debug(PROCESSOR_NAME + " getting type from table:" + tableName);
+        // Handle table creation
+        if (KineticaUtilities.tableExists(gpudb, tableName, getLogger())) {
+            getLogger().debug(PROCESSOR_NAME + " Getting type from table:" + tableName);
             objectType = Type.fromTable(gpudb, tableName);
             getLogger().debug(PROCESSOR_NAME + " objectType:" + objectType.toString());
         } else if (context.getProperty(PROP_SCHEMA).isSet()) {
@@ -486,7 +535,7 @@ public class PutKinetica extends AbstractProcessor {
             objectType = null;
         }
 
-        batchSize = context.getProperty(PROP_BATCH_SIZE).asInteger();
+        batchSize = context.getProperty(PROP_BATCH_SIZE).evaluateAttributeExpressions().asInteger();
         workers = new WorkerList(gpudb);
 
         // Pre-create BulkInserter if type is already known
@@ -522,153 +571,277 @@ public class PutKinetica extends AbstractProcessor {
         gpudb = null;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
-        final List<FlowFile> successes = new ArrayList<>();
+        final FlowFile flowFile = session.get();
+        final boolean skipErrors = context.getProperty(PROP_ERROR_HANDLING).asBoolean();
 
-        // get flowfiles and continue to ad them to the BulkInserter. It will
-        // use the batch size to flush them to Kinetica automatically
-        List<FlowFile> flowFiles = session.get(batchSize);
-        if (flowFiles == null || flowFiles.size() == 0) {
+        if (flowFile == null) {
             return;
-        } else {
-            getLogger().debug(PROCESSOR_NAME + " Found {} rows for insert.", new Object[] { flowFiles.size(), null, null });
         }
 
         try {
+            if (!KineticaUtilities.tableExists(gpudb, tableName, getLogger())) {
+                throw new ProcessException(PROCESSOR_NAME + " Error: Table '" + tableName + "' does not exist in Kinetica. "
+                                           + "Please provide a schema or create the table prior to loading data.");
+            }
             ensureBulkInserter();
         } catch (Exception e) {
-            getLogger().error(PROCESSOR_NAME + " Error: Failed to create BulkInserter: " + e.getMessage());
-            return;
+            throw new ProcessException(PROCESSOR_NAME + " Error: Failed to create BulkInserter " + e.getMessage()
+                            + "; for debugging purposes, here is the stack trace:\n"
+                            + KineticaUtilities.convertStacktraceToString(e));
         }
+        
+        // Note: The following are length 1 arrays so that they can be declared
+        // final and they can be used in anonymous functions.
 
-        final long start = System.currentTimeMillis();
-        for (final FlowFile flowFile : flowFiles) {
-            Record object = createGPUdbRecord(flowFile, session);
-            if (object != null) {
-                try {
-                    bulkInserter.insert(object);
-                    successes.add(flowFile);
-                } catch (BulkInserter.InsertException e) {
-                    // Get any records that failed to insert and retry them
-                    getLogger().error(PROCESSOR_NAME + " Error: " + e.getMessage() );
-                    session.transfer(flowFile, REL_FAILURE);
-                }
-            } else {
-                // Failed to create a Record Object, mark record as failed
-                getLogger().error( PROCESSOR_NAME + 
-                        " Error: Found failed to create a Record Object, please check error logs for more details.",
-                        new Object[] { null, null, null });
-                session.transfer(flowFile, REL_FAILURE);
-            }
-        }
+        final Type[] type = new Type[1];
+        final int[][] attributeNumbers = new int[1][];
+        final boolean[] failed = { false };
 
-        // Flush the bulk inserter object to make sure all objects are inserted
+        // Create the flow file for the failure relationship (for bad records)
+        FlowFile failureFlowFile = session.create( flowFile );
+
+        // Read the incoming flow file
+        InputStream istream = session.read( flowFile );
+        BufferedReader br = null;
         try {
-            bulkInserter.flush();
-        } catch (BulkInserter.InsertException e) {
-            getLogger().error(PROCESSOR_NAME + " Error: " + e.getMessage());
-        }
-
-        final long sendMillis = System.currentTimeMillis() - start;
-        // mark all flowfiles as successful if they made it to Kinetica
-        for (FlowFile insertedFlowFile : successes) {
-            session.transfer(insertedFlowFile, REL_SUCCESS);
-            final String details = "Insert " + insertedFlowFile.toString() + " into Kinetica";
-            session.getProvenanceReporter().send(insertedFlowFile, PROP_SERVER + " " + PROP_TABLE, details, sendMillis);
-        }
-    }
-
-    /*
-     * Create a Record for the Flowfile The Kinetica Record object will be used
-     * to map to the attributes in the FlowFile Attributes that don't exist in
-     * the Kinetica Record object will be ignored The Kinetica Record was
-     * created from the pipe delimited schema
-     */
-    @SuppressWarnings("rawtypes")
-    private Record createGPUdbRecord(FlowFile flowFile, ProcessSession session) {
-        Record object = objectType.newInstance();
-        String value = null;
-        String columnName = null;
-
-        Map attributeMap = flowFile.getAttributes();
-        for (Column column : objectType.getColumns()) {
-            try {
-                columnName = column.getName();
-                if (attributeMap.containsKey(columnName)) {
-                    value = attributeMap.get(columnName).toString();
+            // Create the table if it does not already exist
+            type[0] = objectType;
+            if (type[0] == null) {
+                if (context.getProperty(PROP_SCHEMA).isSet()) {
+                    type[0] = createTable(context, context.getProperty(PROP_SCHEMA).evaluateAttributeExpressions().getValue());
+                } else if (context.getProperty(PROP_AVRO_SCHEMA).isSet()) {
+                    type[0] = createTableFromAvroSchema(context, context.getProperty(PROP_AVRO_SCHEMA).evaluateAttributeExpressions().getValue());
                 } else {
-                    value = null;
+                    throw new ProcessException(PROCESSOR_NAME + " Error: No table and no schema defined.");
+                }
+                objectType = type[0];
+            }
+
+            // The number of columns in the type
+            int numColumns = type[0].getColumnCount();
+
+            // Create the CSV formatter using the builder pattern (withDelimiter() deprecated in commons-csv 1.10+)
+            CSVFormat.Builder formatBuilder = CSVFormat.DEFAULT.builder().setDelimiter(delimiter);
+
+            // Add the escape character, if any
+            if ( escape != '"' ) {
+                formatBuilder = formatBuilder.setEscape( escape );
+            }
+
+            // Add the quote character, if not the default
+            if ( isEmptyQuote ) {
+                formatBuilder = formatBuilder.setQuote( null );
+            }
+            else {
+                formatBuilder = formatBuilder.setQuote( quote );
+            }
+
+            CSVFormat format = formatBuilder.build();
+
+            // Create the CSV file reader
+            br = new BufferedReader( new InputStreamReader( istream ) );
+                    
+            // We'll keep a count of how many objects have been
+            // inserted and how many errors have been encountered
+            int count = 0;
+            int errorCount = 0;
+
+            Type tempType = objectType;
+
+            String line = null;
+                    
+            // Handle the header line, if specified to have any
+            if ( hasHeader ) {
+                // Skip the line (unless it's an empty file)
+                line = br.readLine();
+                if ( line == null ) {
+                    getLogger().warn( PROCESSOR_NAME + " Warning: Empty CSV file!" );
+                    br.close();
+                    return;
+                }
+                // Put the header line in the failure flow file (need to use a final
+                // variable to use in the inner anonymous class); need to add the newline back
+                final String header = (line + "\n");
+                failureFlowFile = session.write( failureFlowFile, new OutputStreamCallback() {
+                        @Override
+                        public void process( OutputStream out ) throws IOException {
+                            out.write( header.getBytes() );
+                        }
+                    } );
+                        
+            }
+                        
+            // Process the lines in the file as records
+            while ( (line = br.readLine()) != null ) {
+                CSVRecord record;
+                try {
+                    // Parse the single line into a single record
+                    record = CSVParser.parse( line, format ).getRecords().get( 0 );
+                } catch (Exception e) {
+                    // If we're not skipping errors, throw an exception
+                    if (!skipErrors) {
+                        throw new ProcessException( PROCESSOR_NAME + " error in record " + (count + 1)
+                                                    + ": Unable to read line from the CSV file." );
+                    } else {
+                        // if we are skipping errors, jump to next row
+                        getLogger().warn(PROCESSOR_NAME + " Warning: Skipping problematic line: " + line);
+                        continue;
+                    }
                 }
 
-                boolean timeStamp = KineticaUtilities.checkForTimeStamp( column );
+                if (record.size() != numColumns) {
+                    // if we are not skipping errors, reject the whole
+                    // file
+                    if (!skipErrors) {
+                        throw new ProcessException(PROCESSOR_NAME + " error in record " + (count + 1)
+                                                   + ": Incorrect number of fields. " + record.toString());
+                    } else {
+                        // if we are skipping errors, jump to next row
+                        getLogger().warn( PROCESSOR_NAME + " Warning: Skipping malformed record with incorrect number "
+                                          + "of columns (expected " + numColumns + ", got " + record.size()
+                                          + "); record: " + record.toString());
+                        continue;
+                    }
+                }
+                        
+                Record object = tempType.newInstance();
+                attributeNumbers[0] = new int[record.size()];
+                        
+                boolean isRecordBad = false;
+                for (int i = 0; i < record.size(); i++) {
+                    int attributeNumber = attributeNumbers[0][i];
 
-                if (timeStamp && value != null) {
-                    if (StringUtils.isNumeric(value)) {
-                        long valueLong;
-                        try {
-                            valueLong = Long.parseLong(value);
-                        } catch (NumberFormatException ex) {
-                            valueLong = 0;
+                    if (attributeNumber > -1) {
+                        String value = record.get(i);
+                        Column column = type[0].getColumn(i);
+                        if (value.trim().length() == 0) {
+                            value = null;
                         }
 
-                        object.put(columnName, valueLong);
-                    } else {
-                        Long timestamp = KineticaUtilities.parseDate(value, dataFormat, timeZone, getLogger());
-                        object.put(columnName, timestamp);
-                    }
-                } else if (column.getType() == Double.class && value != null) {
-                    double valueDouble;
-                    try {
-                        valueDouble = Double.parseDouble(value);
-                    } catch (NumberFormatException ex) {
-                        valueDouble = 0;
-                    }
-                    object.put(columnName, valueDouble);
-                } else if (column.getType() == Float.class && value != null) {
-                    float valueFloat;
-                    try {
-                        valueFloat = Float.parseFloat(value);
-                    } catch (NumberFormatException ex) {
-                        valueFloat = 0;
-                    }
-                    object.put(columnName, valueFloat);
-                } else if (column.getType() == Integer.class && value != null) {
-                    int valueInt;
-                    try {
-                        valueInt = Integer.parseInt(value);
-                    } catch (NumberFormatException ex) {
-                        valueInt = 0;
-                    }
-                    object.put(columnName, valueInt);
-                } else if (column.getType() == java.lang.Long.class && value != null) {
-                    long valueLong;
-                    try {
-                        valueLong = Long.parseLong(value);
-                    } catch (NumberFormatException ex) {
-                        valueLong = 0;
-                    }
+                        try {
+                            boolean timeStamp = KineticaUtilities.checkForTimeStamp( column );
+                            if ( value != null ) {
+                                // Parse the non-null value according to type
+                                if ( timeStamp ) {
+                                    if (StringUtils.isNumeric(value)) {
+                                        long valueLong;
+                                        try {
+                                            valueLong = Long.parseLong(value);
+                                        } catch (NumberFormatException ex) {
+                                            valueLong = 0;
+                                        }
+    
+                                        object.put(column.getName(), valueLong);
+                                    } else {
+    
+                                        Long timestamp = KineticaUtilities.parseDate(value, dateFormat, timeZone, getLogger());
+                                            
+                                        if (timestamp != null) {
+                                            object.put(column.getName(), timestamp);
+                                        } else {        
+                                            getLogger().error(PROCESSOR_NAME + " Error: Failed to parse date. Please check your date format and try again.");
+                                            isRecordBad = true;
+                                            throw new GPUdbException( "Bad timestamp given: '" + value + "'" );
+                                        }
+                                    }
+                                } else if ( column.getType() == Double.class ) {
+                                    object.put(column.getName(), Double.parseDouble(value));
+                                } else if ( column.getType() == Float.class ) {
+                                    object.put(column.getName(), Float.parseFloat(value));
+                                } else if ( column.getType() == Integer.class ) {
+                                    object.put(column.getName(), Integer.parseInt(value));
+                                } else if ( column.getType() == java.lang.Long.class ) {
+                                    object.put(column.getName(), Long.parseLong(value));
+                                } else {
+                                    if ( !value.trim().equals("")) {
+                                        object.put(column.getName(), value.trim());
+                                    }
+                                }
+                            } else { // got a null value
+                                if ( column.isNullable() ) {
+                                    object.put( column.getName(), null );
+                                } else {
+                                    throw new GPUdbException( "Found null value for non-nullable column " + column.getName());
+                                }
+                            }
+                        } catch (GPUdbException e) {
+                            // if we are not skipping errors, reject the
+                            // whole file
+                            if (!skipErrors) {
+                                session.transfer(flowFile, REL_FAILURE);
+                                throw new ProcessException(PROCESSOR_NAME + " error in record " + (count + 1) + ": Invalid value \""
+                                                           + value + "\" for field " + column.getName() + ".");
+                            } else {
+                                // if we are skipping errors, jump to
+                                // next record
+                                errorCount++;
+                                getLogger().warn(PROCESSOR_NAME + " Warning: Skippin record " + (count + 1) + ": Invalid value \""
+                                                 + value + "\" for field " + column.getName() + ". Total error count = " + errorCount);
 
-                    object.put(columnName, valueLong);
-                } else {
-                    if (value != null && !value.trim().equals("")) {
-                        object.put(columnName, value);
+                                // Add the bad record to the end of the failure flow file (need to use a final
+                                // variable to use in the inner anonymous class); need to add the newline back
+                                final String badRecord = (line + "\n");
+                                failureFlowFile = session.append( failureFlowFile, new OutputStreamCallback() {
+                                        @Override
+                                        public void process( OutputStream out ) throws IOException {
+                                            out.write( badRecord.getBytes() );
+                                        }
+                                    } );
+
+                                isRecordBad = true;
+                                break;
+                            }
+                        }
+                    }
+                }   // end inner for loop over columns
+
+                if ( !isRecordBad ) {
+                    try {
+                        bulkInserter.insert(object);
+                    } catch (BulkInserter.InsertException e) {
+                        getLogger().error(PROCESSOR_NAME + " Error: " + e.getMessage() );
                     }
                 }
+                count++;
+            }   // end outer while loop over lines
 
-                getLogger().debug(PROCESSOR_NAME + " Found {} column with value {} inserting into Kinetica.",
-                        new Object[] { columnName, value, null });
-            } catch (Exception e) {
-                // if the flow file fails to become an object, mark it as failed
-                // and null out the object for return handling
-                session.transfer(flowFile, REL_FAILURE);
-                getLogger().error(PROCESSOR_NAME +  " Error: Found {} column with value {} and failed to create a Record Obect.",
-                        new Object[] { columnName, value, null });
-                object = null;
+            // Flush the bulk inserter object to make sure all objects
+            // are inserted
+            try {
+                bulkInserter.flush();
+            } catch (BulkInserter.InsertException e) {
+                getLogger().error( PROCESSOR_NAME + " Error: " + e.getMessage() );
+            }
+
+            getLogger().info(PROCESSOR_NAME + ": Wrote {} record(s) to set {} at {}.",
+                             new Object[] { count, tableName, gpudb.getURL() });
+        } catch (Exception ex) {
+            getLogger().error(PROCESSOR_NAME + " Error: Failed to write to set {} at {} in second read",
+                              new Object[] { tableName, gpudb.getURL() }, ex);
+            failed[0] = true;
+        } finally {
+            // Clean up the input stream and the buffered reader
+            try {
+                br.close();
+                istream.close();
+            } catch ( IOException ex ) {
+                throw new ProcessException( "Error closing the InputStream or BufferedReader: " + ex.getMessage() );
             }
         }
 
-        return object;
+        // Check if the whole action failed
+        if (failed[0]) {
+            session.transfer(flowFile, REL_FAILURE);
+        } else {  // there was some success
+            session.getProvenanceReporter().send(flowFile, gpudb.getURL().toString(), tableName);
+            session.transfer(flowFile, REL_SUCCESS);
+        }
+
+        // Check if there are any bad records needing to go to failure
+        if (failureFlowFile != null) {
+            session.transfer( failureFlowFile, REL_FAILURE );
+        }
     }
 }
