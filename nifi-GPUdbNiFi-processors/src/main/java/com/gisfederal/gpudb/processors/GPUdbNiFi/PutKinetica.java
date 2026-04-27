@@ -13,6 +13,7 @@ import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
@@ -47,28 +48,36 @@ import com.gpudb.protocol.InsertRecordsRequest;
 public class PutKinetica extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder().name( KineticaConstants.SERVER_URL )
         .description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.URL_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_COLLECTION = new PropertyDescriptor.Builder().name( KineticaConstants.COLLECTION_NAME )
-        .description("Name of the Kinetica collection").required(false)
+        .description("Deprecated in Kinetica 7.1+. Use schema-qualified table names instead (e.g. 'myschema.mytable'). This property is ignored.")
+        .required(false)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_TABLE = new PropertyDescriptor.Builder().name( KineticaConstants.TABLE_NAME )
-        .description("Name of the Kinetica table").required(true)
+        .description("Name of the Kinetica table. Use schema-qualified names (e.g. 'myschema.mytable') for schema support.")
+        .required(true)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_SCHEMA = new PropertyDescriptor.Builder().name( KineticaConstants.SCHEMA )
         .description("Schema of the Kinetica table. Schema not required if table exists in Kinetica already."
                      + " Example schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data")
-        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name( KineticaConstants.BATCH_SIZE )
         .description("The maximum number of FlowFiles to process in a single execution. The FlowFiles will be "
                      + "grouped by table, and a batch insert per table will be performed.")
-        .required(true).addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("500").build();
+        .required(true).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("500").build();
 
     public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder().name( KineticaConstants.USERNAME )
         .description("Username to connect to Kinetica").required(false)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder().name( KineticaConstants.PASSWORD )
@@ -97,14 +106,16 @@ public class PutKinetica extends AbstractProcessor {
         .name( KineticaConstants.DATE_FORMAT )
         .description("Provide the date format used for your datetime values"
                      + " Example: yyyy/MM/dd HH:mm:ss")
-        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder()
         .name( KineticaConstants.TIMEZONE )
         .description(
                      "Provide the timezone the data was created in. If no timezone is set, the current timezone will be used."
                      + " Example: EST")
-        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final Relationship REL_SUCCESS = new Relationship.Builder().name( KineticaConstants.SUCCESS )
         .description("All FlowFiles that are written to Kinetica are routed to this relationship").build();
@@ -236,22 +247,19 @@ public class PutKinetica extends AbstractProcessor {
         String typeId = type.create(gpudb);
         response = gpudb.hasTable(tableName, null);
         Map<String, String> create_table_options;
-        String parent = context.getProperty(PROP_COLLECTION).getValue();
-        if (parent == null) {
-            parent = "";
-        }
 
         if (!response.getTableExists()) {
             boolean replicated_flag = context.getProperty(PROP_REPLICATE_TABLE).isSet()
                     && context.getProperty(PROP_REPLICATE_TABLE).asBoolean().booleanValue();
             getLogger().debug(PROCESSOR_NAME + " replicated_flag = " + replicated_flag);
 
-            create_table_options = GPUdb.options(CreateTableRequest.Options.COLLECTION_NAME, parent,
+            // COLLECTION_NAME is deprecated in Kinetica 7.1+; use schema-qualified table names instead
+            create_table_options = GPUdb.options(
                     CreateTableRequest.Options.IS_REPLICATED,
                     replicated_flag ? CreateTableRequest.Options.TRUE : CreateTableRequest.Options.FALSE);
 
             getLogger().debug(PROCESSOR_NAME + " create_table_options has " + create_table_options.size() + "properties");
-            gpudb.createTable(context.getProperty(PROP_TABLE).getValue(), typeId, create_table_options);
+            gpudb.createTable(context.getProperty(PROP_TABLE).evaluateAttributeExpressions().getValue(), typeId, create_table_options);
         }
 
         gpudb.addKnownType(typeId, RecordObject.class);
@@ -261,16 +269,16 @@ public class PutKinetica extends AbstractProcessor {
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws GPUdbException {
         Options option = new Options();
-        if (context.getProperty(PROP_USERNAME).getValue() != null
+        if (context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue() != null
                 && context.getProperty(PROP_PASSWORD).getValue() != null) {
-            option.setUsername(context.getProperty(PROP_USERNAME).getValue());
+            option.setUsername(context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue());
             option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
         }
-        gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue(), option);
-        tableName = context.getProperty(PROP_TABLE).getValue();
+        gpudb = new GPUdb(context.getProperty(PROP_SERVER).evaluateAttributeExpressions().getValue(), option);
+        tableName = context.getProperty(PROP_TABLE).evaluateAttributeExpressions().getValue();
         updateOnExistingPk = context.getProperty(UPDATE_ON_EXISTING_PK).asBoolean().booleanValue();
-        dataFormat = context.getProperty(PROP_DATE_FORMAT).getValue();
-        timeZone = context.getProperty(PROP_TIMEZONE).getValue();
+        dataFormat = context.getProperty(PROP_DATE_FORMAT).evaluateAttributeExpressions().getValue();
+        timeZone = context.getProperty(PROP_TIMEZONE).evaluateAttributeExpressions().getValue();
 
         HasTableResponse response;
 
@@ -286,7 +294,7 @@ public class PutKinetica extends AbstractProcessor {
             objectType = Type.fromTable(gpudb, tableName);
             getLogger().debug(PROCESSOR_NAME + " objectType:" + objectType.toString());
         } else if (context.getProperty(PROP_SCHEMA).isSet()) {
-            objectType = createTable(context, context.getProperty(PROP_SCHEMA).getValue());
+            objectType = createTable(context, context.getProperty(PROP_SCHEMA).evaluateAttributeExpressions().getValue());
         } else {
             objectType = null;
         }

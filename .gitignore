@@ -1,0 +1,32 @@
+# Build output
+target/
+*.class
+*.jar
+*.nar
+
+# IDE
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Maven
+dependency-reduced-pom.xml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment (contains credentials — never commit)
+.env
+
+# RPM build output
+rpm/BUILD/
+rpm/RPMS/
+rpm/SRPMS/
+rpm/BUILDROOT/

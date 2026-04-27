@@ -32,6 +32,7 @@ public final class KineticaConstants {
 
     public static final String PASSWORD = "Password";
 
+    public static final String SQL_QUERY = "SQL Query";
     public static final String UPDATE_ON_EXISTING_PK = "Update on Existing PK";
 
     public static final String REPLICATE_TABLE = "Replicate Table";

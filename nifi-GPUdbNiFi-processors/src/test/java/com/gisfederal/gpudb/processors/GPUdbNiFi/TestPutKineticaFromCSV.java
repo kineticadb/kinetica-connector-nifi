@@ -9,7 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.nifi.util.MockFlowFile;
 import org.apache.nifi.util.TestRunners;
 import org.apache.nifi.util.TestRunner;
@@ -28,7 +29,7 @@ public class TestPutKineticaFromCSV extends TestBase {
 
     protected static TestRunner runner;
 
-    private final static Logger LOG = Logger.getLogger( TestPutKineticaFromCSV.class );
+    private static final Logger LOG = LoggerFactory.getLogger(TestPutKineticaFromCSV.class);
     
     private static List<String> tablesToClear;
 

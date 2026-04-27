@@ -1,9 +1,7 @@
 package com.gisfederal.gpudb.processors.GPUdbNiFi;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,11 +13,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.avro.Schema;
+import org.apache.avro.file.DataFileWriter;
 import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.io.DatumWriter;
-import org.apache.avro.io.EncoderFactory;
-import org.apache.avro.io.JsonEncoder;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
@@ -45,59 +42,61 @@ import org.zeromq.ZMsg;
 
 import com.gpudb.Avro;
 import com.gpudb.GPUdb;
+import com.gpudb.GPUdbBase.Options;
 import com.gpudb.GPUdbException;
 import com.gpudb.Type;
-import com.gpudb.GPUdbBase.Options;
 import com.gpudb.protocol.CreateTableMonitorResponse;
 
+@Tags({"Kinetica", "gpudb", "get", "avro"})
+@CapabilityDescription("Monitors a Kinetica table via ZeroMQ table monitor and outputs new records as "
+        + "Apache Avro container files (application/avro-binary). Each FlowFile contains one or more "
+        + "Avro records using the table's schema. Requires a running table monitor endpoint.")
+@WritesAttribute(attribute = "mime.type", description = "Sets MIME type to application/avro-binary")
+public class GetKineticaToAvro extends AbstractProcessor {
 
-@Tags({"gpudb", "get"})
-@CapabilityDescription("Monitors a set in GPUdb and reads new objects into CSV files")
-@WritesAttribute(attribute = "mime.type", description = "Sets MIME type to application/json")
-public class GetKineticaToJSON extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder()
-            .name( KineticaConstants.SERVER_URL )
-            .description("URL of the GPUdb server")
+            .name(KineticaConstants.SERVER_URL)
+            .description("URL of the Kinetica server")
             .required(true)
             .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
     public static final PropertyDescriptor PROP_SET = new PropertyDescriptor.Builder()
-            .name( KineticaConstants.TABLE_NAME )
-            .description("Name of the GPUdb table")
+            .name(KineticaConstants.TABLE_NAME)
+            .description("Name of the Kinetica table to monitor")
             .required(true)
             .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
     public static final PropertyDescriptor PROP_OBJECT_MONITOR = new PropertyDescriptor.Builder()
-            .name( KineticaConstants.TABLE_MONITOR_URL )
-            .description("URL of the GPUdb table monitor")
+            .name(KineticaConstants.TABLE_MONITOR_URL)
+            .description("URL of the Kinetica ZeroMQ table monitor endpoint")
             .required(true)
             .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
-    
+
     public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder()
-            .name( KineticaConstants.USERNAME )
+            .name(KineticaConstants.USERNAME)
             .description("Username to connect to Kinetica")
             .required(false)
             .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build(); 
-    
+            .build();
+
     public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder()
-            .name( KineticaConstants.PASSWORD )
+            .name(KineticaConstants.PASSWORD)
             .description("Password to connect to Kinetica")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .sensitive(true)
             .build();
-    
+
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
-            .name( KineticaConstants.SUCCESS )
-            .description("All CSV files from the GPUdb set are routed to this relationship")
+            .name(KineticaConstants.SUCCESS)
+            .description("All Avro files from the Kinetica table are routed to this relationship")
             .build();
 
     private GPUdb gpudb;
@@ -107,16 +106,16 @@ public class GetKineticaToJSON extends AbstractProcessor {
     private ConcurrentLinkedQueue<GenericRecord> queue;
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
-    
+
     @Override
     protected void init(final ProcessorInitializationContext context) {
         final List<PropertyDescriptor> descriptorsList = new ArrayList<>();
         descriptorsList.add(PROP_SERVER);
         descriptorsList.add(PROP_SET);
-        descriptorsList.add(PROP_OBJECT_MONITOR);  
+        descriptorsList.add(PROP_OBJECT_MONITOR);
         descriptorsList.add(PROP_USERNAME);
         descriptorsList.add(PROP_PASSWORD);
-        
+
         this.descriptors = Collections.unmodifiableList(descriptorsList);
 
         final Set<Relationship> relationshipsList = new HashSet<>();
@@ -136,14 +135,14 @@ public class GetKineticaToJSON extends AbstractProcessor {
 
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws GPUdbException {
-
         Options option = new Options();
-        if (context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
+        if (context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue() != null
+                && context.getProperty(PROP_PASSWORD).getValue() != null) {
             option.setUsername(context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue());
             option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
         }
         gpudb = new GPUdb(context.getProperty(PROP_SERVER).evaluateAttributeExpressions().getValue(), option);
-        
+
         set = context.getProperty(PROP_SET).evaluateAttributeExpressions().getValue();
         objectType = Type.fromTable(gpudb, set);
         queue = new ConcurrentLinkedQueue<>();
@@ -153,7 +152,6 @@ public class GetKineticaToJSON extends AbstractProcessor {
             public void run() {
                 try {
                     CreateTableMonitorResponse response = gpudb.createTableMonitor(set, null);
-
                     String topicId = response.getTopicId();
 
                     try (ZContext zmqContext = new ZContext(1)) {
@@ -185,11 +183,12 @@ public class GetKineticaToJSON extends AbstractProcessor {
                         gpudb.clearTableMonitor(topicId, null);
                     }
                 } catch (Exception ex) {
-                    getLogger().error("Unable to get data from {}", new Object[] { context.getProperty(PROP_OBJECT_MONITOR).evaluateAttributeExpressions().getValue() }, ex);
+                    getLogger().error("Unable to get data from {}",
+                            new Object[]{context.getProperty(PROP_OBJECT_MONITOR).evaluateAttributeExpressions().getValue()}, ex);
                 }
             }
         });
-        mainThread.start();        
+        mainThread.start();
     }
 
     @OnUnscheduled
@@ -199,7 +198,6 @@ public class GetKineticaToJSON extends AbstractProcessor {
             mainThread = null;
         }
     }
-
 
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
@@ -221,34 +219,31 @@ public class GetKineticaToJSON extends AbstractProcessor {
         }
 
         FlowFile flowFile = session.create();
+        final Schema schema = objectType.getSchema();
 
         flowFile = session.write(flowFile, new OutputStreamCallback() {
             @Override
             public void process(OutputStream out) throws IOException {
-               //should output one flowfile per record, not sure about this yet
-                try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(out))) {    
-                    for (GenericRecord object : objectList) {
-                        Schema schema = object.getSchema();
-                        JsonEncoder encoder = EncoderFactory.get().jsonEncoder(schema, out);
-                        DatumWriter<Object> datumWriter = new GenericDatumWriter<>(schema);
-                        datumWriter.write(object, encoder);
-                        writer.flush();
-                        out.flush();
-                        encoder.flush();
-                        getLogger().info("writing record {} to set {} at {}.", new Object[] { object.toString(), set, gpudb.getURL() });
+                DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(schema);
+                try (DataFileWriter<GenericRecord> dataFileWriter = new DataFileWriter<>(datumWriter)) {
+                    dataFileWriter.create(schema, out);
+                    for (GenericRecord record : objectList) {
+                        dataFileWriter.append(record);
                     }
-                }
-                catch(Exception ex){
-                    getLogger().error("Unable to get data from {}", new Object[] { context.getProperty(PROP_OBJECT_MONITOR).evaluateAttributeExpressions().getValue() }, ex);
+                } catch (Exception ex) {
+                    getLogger().error("Error writing Avro output for table {}", new Object[]{set}, ex);
                 }
             }
         });
 
         final Map<String, String> attributes = new HashMap<>();
-        attributes.put(CoreAttributes.MIME_TYPE.key(), "application/json");
-        attributes.put(CoreAttributes.FILENAME.key(), flowFile.getAttribute(CoreAttributes.FILENAME.key()) + ".json");
+        attributes.put(CoreAttributes.MIME_TYPE.key(), "application/avro-binary");
+        attributes.put(CoreAttributes.FILENAME.key(), flowFile.getAttribute(CoreAttributes.FILENAME.key()) + ".avro");
         flowFile = session.putAllAttributes(flowFile, attributes);
         session.getProvenanceReporter().receive(flowFile, gpudb.getURL().toString(), set);
         session.transfer(flowFile, REL_SUCCESS);
+
+        getLogger().info("Got {} Avro record(s) from table {} at {}.",
+                new Object[]{objectList.size(), set, gpudb.getURL()});
     }
 }

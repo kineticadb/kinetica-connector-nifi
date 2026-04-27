@@ -23,6 +23,7 @@ import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
@@ -58,33 +59,42 @@ import com.gpudb.protocol.InsertRecordsRequest;
 public class PutKineticaFromFile extends AbstractProcessor {
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder().name( KineticaConstants.SERVER_URL )
         .description("URL of the Kinetica server. Example http://172.3.4.19:9191").required(true)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.URL_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_COLLECTION = new PropertyDescriptor.Builder().name( KineticaConstants.COLLECTION_NAME )
-        .description("Name of the Kinetica collection").required(false)
+        .description("Deprecated in Kinetica 7.1+. Use schema-qualified table names instead (e.g. 'myschema.mytable'). This property is ignored.")
+        .required(false)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_TABLE = new PropertyDescriptor.Builder().name( KineticaConstants.TABLE_NAME )
-        .description("Name of the Kinetica table").required(true)
+        .description("Name of the Kinetica table. Use schema-qualified names (e.g. 'myschema.mytable') for schema support.")
+        .required(true)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_SCHEMA = new PropertyDescriptor.Builder().name( KineticaConstants.SCHEMA )
         .description("Schema of the Kinetica table. Schema not required if table exists in Kinetica already."
                      + " Example schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data")
-        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_DELIMITER = new PropertyDescriptor.Builder().name( KineticaConstants.DELIMITER )
         .description("Delimiter of CSV input data (usually a ',' or '\t' (tab); defaults to ',' (comma))")
-        .required(true).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue(",").build();
+        .required(true).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue(",").build();
 
     public static final PropertyDescriptor PROP_ESCAPE_CHAR = new PropertyDescriptor.Builder().name( KineticaConstants.ESCAPE_CHARACTER )
         .description("Escape character for the CSV input data (usually a '\' or '\"' (double quote); defaults to '\"' (double quote))")
-        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue("\"").build();
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).defaultValue("\"").build();
 
     public static final PropertyDescriptor PROP_QUOTE_CHAR = new PropertyDescriptor.Builder().name( KineticaConstants.QUOTE_CHARACTER )
         .description("Quote character for the CSV input data (usually a '\"'(double quote); defaults to '\"' (double quote)). "
                      + "When empty, no quote character is used.")
-        .required(false).addValidator( new StandardValidators.StringLengthValidator(0, 1)).defaultValue("\"").build();
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator( new StandardValidators.StringLengthValidator(0, 1)).defaultValue("\"").build();
 
     protected static final PropertyDescriptor PROP_HAS_HEADER = new PropertyDescriptor.Builder()
         .name( KineticaConstants.FILE_HAS_HEADER )
@@ -95,6 +105,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
 
     protected static final PropertyDescriptor PROP_BATCH_SIZE = new PropertyDescriptor.Builder().name( KineticaConstants.BATCH_SIZE )
         .description("Batch size of bulk load to Kinetica.").required(true)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR).defaultValue("500").build();
 
     protected static final PropertyDescriptor PROP_ERROR_HANDLING = new PropertyDescriptor.Builder()
@@ -106,6 +117,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
 
     public static final PropertyDescriptor PROP_USERNAME = new PropertyDescriptor.Builder().name( KineticaConstants.USERNAME )
         .description("Username to connect to Kinetica").required(false)
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_PASSWORD = new PropertyDescriptor.Builder().name( KineticaConstants.PASSWORD )
@@ -133,13 +145,15 @@ public class PutKineticaFromFile extends AbstractProcessor {
     public static final PropertyDescriptor PROP_DATE_FORMAT = new PropertyDescriptor.Builder().name( KineticaConstants.DATE_FORMAT )
         .description("Provide the date format used for your datetime values"
                      + " Example: yyyy/MM/dd HH:mm:ss")
-        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final PropertyDescriptor PROP_TIMEZONE = new PropertyDescriptor.Builder().name( KineticaConstants.TIMEZONE )
         .description(
                      "Provide the timezone the data was created in. If no timezone is set, the current timezone will be used."
                      + " Example: EST")
-        .required(false).addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+        .required(false).expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
 
     public static final Relationship REL_SUCCESS = new Relationship.Builder().name( KineticaConstants.SUCCESS )
         .description("All FlowFiles that are written to Kinetica are routed to this relationship").build();
@@ -281,22 +295,19 @@ public class PutKineticaFromFile extends AbstractProcessor {
         String typeId = type.create(gpudb);
         response = gpudb.hasTable(tableName, null);
         Map<String, String> create_table_options;
-        String parent = context.getProperty(PROP_COLLECTION).getValue();
-        if (parent == null) {
-            parent = "";
-        }
 
         if (!response.getTableExists()) {
             boolean replicated_flag = context.getProperty(PROP_REPLICATE_TABLE).isSet()
                     && context.getProperty(PROP_REPLICATE_TABLE).asBoolean().booleanValue();
             getLogger().debug(PROCESSOR_NAME + " replicated_flag = " + replicated_flag);
 
-            create_table_options = GPUdb.options(CreateTableRequest.Options.COLLECTION_NAME, parent,
+            // COLLECTION_NAME is deprecated in Kinetica 7.1+; use schema-qualified table names instead
+            create_table_options = GPUdb.options(
                     CreateTableRequest.Options.IS_REPLICATED,
                     replicated_flag ? CreateTableRequest.Options.TRUE : CreateTableRequest.Options.FALSE);
 
             getLogger().debug(PROCESSOR_NAME + " create_table_options has " + create_table_options.size() + "properties");
-            gpudb.createTable(context.getProperty(PROP_TABLE).getValue(), typeId, create_table_options);
+            gpudb.createTable(context.getProperty(PROP_TABLE).evaluateAttributeExpressions().getValue(), typeId, create_table_options);
         }
 
         gpudb.addKnownType(typeId, RecordObject.class);
@@ -306,25 +317,25 @@ public class PutKineticaFromFile extends AbstractProcessor {
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws GPUdbException {
         Options option = new Options();
-        if (context.getProperty(PROP_USERNAME).getValue() != null
+        if (context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue() != null
                 && context.getProperty(PROP_PASSWORD).getValue() != null) {
-            option.setUsername(context.getProperty(PROP_USERNAME).getValue());
+            option.setUsername(context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue());
             option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
         }
         // Create a connection to the Kinetica server
-        gpudb = new GPUdb(context.getProperty(PROP_SERVER).getValue(), option);
+        gpudb = new GPUdb(context.getProperty(PROP_SERVER).evaluateAttributeExpressions().getValue(), option);
 
         // Process the configuration options
-        tableName = context.getProperty(PROP_TABLE).getValue();
-        delimiter = context.getProperty(PROP_DELIMITER).getValue().charAt(0);
-        escape    = context.getProperty(PROP_ESCAPE_CHAR).getValue().charAt(0);
-        String quote_char = context.getProperty(PROP_QUOTE_CHAR).getValue();
+        tableName = context.getProperty(PROP_TABLE).evaluateAttributeExpressions().getValue();
+        delimiter = context.getProperty(PROP_DELIMITER).evaluateAttributeExpressions().getValue().charAt(0);
+        escape    = context.getProperty(PROP_ESCAPE_CHAR).evaluateAttributeExpressions().getValue().charAt(0);
+        String quote_char = context.getProperty(PROP_QUOTE_CHAR).evaluateAttributeExpressions().getValue();
         isEmptyQuote = quote_char.isEmpty();
-        quote     = isEmptyQuote ? '"' : context.getProperty(PROP_QUOTE_CHAR).getValue().charAt(0);
+        quote     = isEmptyQuote ? '"' : context.getProperty(PROP_QUOTE_CHAR).evaluateAttributeExpressions().getValue().charAt(0);
         hasHeader = context.getProperty(PROP_HAS_HEADER).asBoolean().booleanValue();
         updateOnExistingPk = context.getProperty(UPDATE_ON_EXISTING_PK).asBoolean().booleanValue();
-        dateFormat = context.getProperty(PROP_DATE_FORMAT).getValue();
-        timeZone = context.getProperty(PROP_TIMEZONE).getValue();
+        dateFormat = context.getProperty(PROP_DATE_FORMAT).evaluateAttributeExpressions().getValue();
+        timeZone = context.getProperty(PROP_TIMEZONE).evaluateAttributeExpressions().getValue();
 
         // Handle table creation
         if (KineticaUtilities.tableExists(gpudb, tableName, getLogger())) {
@@ -332,7 +343,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
             objectType = Type.fromTable(gpudb, tableName);
             getLogger().debug(PROCESSOR_NAME + " objectType:" + objectType.toString());
         } else if (context.getProperty(PROP_SCHEMA).isSet()) {
-            objectType = createTable(context, context.getProperty(PROP_SCHEMA).getValue());
+            objectType = createTable(context, context.getProperty(PROP_SCHEMA).evaluateAttributeExpressions().getValue());
         } else {
             objectType = null;
         }
@@ -341,7 +352,7 @@ public class PutKineticaFromFile extends AbstractProcessor {
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
         final FlowFile flowFile = session.get();
-        final int batchSize = context.getProperty(PROP_BATCH_SIZE).asInteger();
+        final int batchSize = context.getProperty(PROP_BATCH_SIZE).evaluateAttributeExpressions().asInteger();
         final boolean skipErrors = context.getProperty(PROP_ERROR_HANDLING).asBoolean();
         final BulkInserter<Record> bulkInserter;
         final WorkerList workers;
@@ -384,28 +395,30 @@ public class PutKineticaFromFile extends AbstractProcessor {
             // Create the table if it does not already exist
             type[0] = objectType;
             if (type[0] == null) {
-                type[0] = createTable(context, context.getProperty(PROP_SCHEMA).getValue());
+                type[0] = createTable(context, context.getProperty(PROP_SCHEMA).evaluateAttributeExpressions().getValue());
                 objectType = type[0];
             }
 
             // The number of columns in the type
             int numColumns = type[0].getColumnCount();
 
-            // Create the CSV formatter with the delimiter
-            CSVFormat format = CSVFormat.DEFAULT.withDelimiter(delimiter);
+            // Create the CSV formatter using the builder pattern (withDelimiter() deprecated in commons-csv 1.10+)
+            CSVFormat.Builder formatBuilder = CSVFormat.DEFAULT.builder().setDelimiter(delimiter);
 
             // Add the escape character, if any
             if ( escape != '"' ) {
-                format = format.withEscape( escape );
+                formatBuilder = formatBuilder.setEscape( escape );
             }
 
             // Add the quote character, if not the default
             if ( isEmptyQuote ) {
-                format = format.withQuote( null );
+                formatBuilder = formatBuilder.setQuote( null );
             }
             else {
-                format = format.withQuote( quote );
+                formatBuilder = formatBuilder.setQuote( quote );
             }
+
+            CSVFormat format = formatBuilder.build();
 
             // Create the CSV file reader
             br = new BufferedReader( new InputStreamReader( istream ) );
