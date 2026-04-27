@@ -3,6 +3,7 @@ target/
 *.class
 *.jar
 *.nar
+!dist/*.nar
 
 # IDE
 .idea/
