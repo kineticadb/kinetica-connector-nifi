@@ -6,14 +6,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.InputStreamReader;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.avro.Schema;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -37,6 +40,7 @@ import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
 import com.gpudb.BulkInserter;
+import com.gpudb.ColumnProperty;
 import com.gpudb.GPUdb;
 import com.gpudb.GPUdbBase.Options;
 import com.gpudb.GPUdbException;
@@ -80,6 +84,17 @@ public class PutKineticaFromCSV extends AbstractProcessor {
                      + " Example schema: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search,AUTHOR|String|text_search|data")
         .required(false).expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).build();
+
+    public static final PropertyDescriptor PROP_AVRO_SCHEMA = new PropertyDescriptor.Builder()
+        .name(KineticaConstants.AVRO_SCHEMA)
+        .description("Avro schema JSON defining the Kinetica table structure. "
+                + "This is the standard NiFi Avro schema format. "
+                + "Used only if the table does not exist and the pipe-delimited Schema property is not set. "
+                + "Avro types are mapped to Kinetica types: string→String, int→Integer, long→Long, float→Float, double→Double, boolean→Integer(0/1), bytes→Bytes.")
+        .required(false)
+        .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+        .build();
 
     public static final PropertyDescriptor PROP_DELIMITER = new PropertyDescriptor.Builder().name( KineticaConstants.DELIMITER )
         .description("Delimiter of CSV input data (usually a ',' or '\t' (tab); defaults to ',' (comma))")
@@ -187,6 +202,7 @@ public class PutKineticaFromCSV extends AbstractProcessor {
         descriptors.add(PROP_COLLECTION);
         descriptors.add(PROP_TABLE);
         descriptors.add(PROP_SCHEMA);
+        descriptors.add(PROP_AVRO_SCHEMA);
         descriptors.add(PROP_DELIMITER);
         descriptors.add(PROP_ESCAPE_CHAR);
         descriptors.add(PROP_QUOTE_CHAR);
@@ -318,6 +334,147 @@ public class PutKineticaFromCSV extends AbstractProcessor {
         return type;
     }
 
+    private Type createTableFromAvroSchema(ProcessContext context, String avroSchemaJson) throws GPUdbException {
+        getLogger().info(PROCESSOR_NAME + " creating table from Avro schema: " + tableName);
+        HasTableResponse response = gpudb.hasTable(tableName, null);
+        if (response.getTableExists()) {
+            return null;
+        }
+
+        Schema avroSchema;
+        try {
+            avroSchema = new Schema.Parser().parse(avroSchemaJson);
+        } catch (Exception e) {
+            throw new GPUdbException("Failed to parse Avro schema JSON: " + e.getMessage());
+        }
+
+        if (avroSchema.getType() != Schema.Type.RECORD) {
+            throw new GPUdbException("Avro schema must be a record type, got: " + avroSchema.getType());
+        }
+
+        List<Column> columns = new ArrayList<>();
+        for (Schema.Field field : avroSchema.getFields()) {
+            Schema fieldSchema = field.schema();
+            boolean isNullable = false;
+
+            // Unwrap union types (e.g., ["null", "string"] → "string") and detect nullability
+            if (fieldSchema.getType() == Schema.Type.UNION) {
+                for (Schema unionType : fieldSchema.getTypes()) {
+                    if (unionType.getType() == Schema.Type.NULL) {
+                        isNullable = true;
+                    }
+                }
+                for (Schema unionType : fieldSchema.getTypes()) {
+                    if (unionType.getType() != Schema.Type.NULL) {
+                        fieldSchema = unionType;
+                        break;
+                    }
+                }
+            }
+
+            // Detect Avro logical types (timestamp-millis, date, time-millis, decimal)
+            String logicalType = null;
+            if (fieldSchema.getLogicalType() != null) {
+                logicalType = fieldSchema.getLogicalType().getName();
+            } else if (fieldSchema.getObjectProp("logicalType") != null) {
+                logicalType = fieldSchema.getObjectProp("logicalType").toString();
+            }
+
+            // Map Avro type + logical type → Kinetica type + column properties
+            Class<?> kineticaType;
+            List<String> properties = new ArrayList<>();
+            properties.add(ColumnProperty.DATA);
+
+            if (logicalType != null) {
+                switch (logicalType) {
+                    case "timestamp-millis":
+                    case "timestamp-micros":
+                        kineticaType = Long.class;
+                        properties.add(ColumnProperty.TIMESTAMP);
+                        break;
+                    case "date":
+                        kineticaType = String.class;
+                        properties.add(ColumnProperty.DATE);
+                        break;
+                    case "time-millis":
+                    case "time-micros":
+                        kineticaType = String.class;
+                        properties.add(ColumnProperty.TIME);
+                        break;
+                    case "decimal":
+                        kineticaType = String.class;
+                        properties.add(ColumnProperty.DECIMAL);
+                        break;
+                    default:
+                        // Unknown logical type — fall through to base type mapping
+                        kineticaType = mapAvroBaseType(fieldSchema, field.name());
+                        break;
+                }
+            } else {
+                kineticaType = mapAvroBaseType(fieldSchema, field.name());
+                // Boolean maps to int8 in Kinetica
+                if (fieldSchema.getType() == Schema.Type.BOOLEAN) {
+                    properties.add(ColumnProperty.INT8);
+                }
+            }
+
+            if (isNullable) {
+                properties.add(ColumnProperty.NULLABLE);
+            }
+
+            columns.add(new Column(field.name(), kineticaType, properties));
+            getLogger().debug(PROCESSOR_NAME + " Avro field '" + field.name() + "' → Kinetica "
+                    + kineticaType.getSimpleName() + " " + properties);
+        }
+
+        Type objectType = new Type(columns);
+        String typeId = objectType.create(gpudb);
+
+        boolean replicateTable = false;
+        try {
+            if (context.getProperty(PROP_REPLICATE_TABLE) != null && context.getProperty(PROP_REPLICATE_TABLE).isSet()) {
+                replicateTable = context.getProperty(PROP_REPLICATE_TABLE).asBoolean();
+            }
+        } catch (Exception e) {
+            // Property may not exist in all processors
+        }
+
+        Map<String, String> createOptions = new LinkedHashMap<>();
+        if (replicateTable) {
+            createOptions.put(CreateTableRequest.Options.IS_REPLICATED, CreateTableRequest.Options.TRUE);
+        }
+
+        gpudb.createTable(tableName, typeId, createOptions);
+        getLogger().info(PROCESSOR_NAME + " created table " + tableName + " from Avro schema with " + columns.size() + " columns");
+
+        return objectType;
+    }
+
+    private Class<?> mapAvroBaseType(Schema fieldSchema, String fieldName) {
+        switch (fieldSchema.getType()) {
+            case STRING:
+            case ENUM:
+                return String.class;
+            case INT:
+                return Integer.class;
+            case LONG:
+                return Long.class;
+            case FLOAT:
+                return Float.class;
+            case DOUBLE:
+                return Double.class;
+            case BOOLEAN:
+                return Integer.class;
+            case BYTES:
+            case FIXED:
+                return ByteBuffer.class;
+            default:
+                getLogger().warn(PROCESSOR_NAME + " Unsupported Avro type '" + fieldSchema.getType()
+                        + "' for field '" + fieldName + "', defaulting to String");
+                return String.class;
+        }
+    }
+
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws GPUdbException {
         Options option = new Options();
@@ -348,6 +505,8 @@ public class PutKineticaFromCSV extends AbstractProcessor {
             getLogger().debug(PROCESSOR_NAME + " objectType:" + objectType.toString());
         } else if (context.getProperty(PROP_SCHEMA).isSet()) {
             objectType = createTable(context, context.getProperty(PROP_SCHEMA).evaluateAttributeExpressions().getValue());
+        } else if (context.getProperty(PROP_AVRO_SCHEMA).isSet()) {
+            objectType = createTableFromAvroSchema(context, context.getProperty(PROP_AVRO_SCHEMA).evaluateAttributeExpressions().getValue());
         } else {
             objectType = null;
         }
@@ -426,7 +585,13 @@ public class PutKineticaFromCSV extends AbstractProcessor {
             // Create the table if it does not already exist
             type[0] = objectType;
             if (type[0] == null) {
-                type[0] = createTable(context, context.getProperty(PROP_SCHEMA).evaluateAttributeExpressions().getValue());
+                if (context.getProperty(PROP_SCHEMA).isSet()) {
+                    type[0] = createTable(context, context.getProperty(PROP_SCHEMA).evaluateAttributeExpressions().getValue());
+                } else if (context.getProperty(PROP_AVRO_SCHEMA).isSet()) {
+                    type[0] = createTableFromAvroSchema(context, context.getProperty(PROP_AVRO_SCHEMA).evaluateAttributeExpressions().getValue());
+                } else {
+                    throw new ProcessException(PROCESSOR_NAME + " Error: No table and no schema defined.");
+                }
                 objectType = type[0];
             }
 

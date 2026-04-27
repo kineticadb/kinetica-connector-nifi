@@ -16,6 +16,8 @@ public final class KineticaConstants {
 
     public static final String SCHEMA = "Schema";
 
+    public static final String AVRO_SCHEMA = "Avro Schema";
+
     public static final String DELIMITER = "Delimiter";
 
     public static final String ESCAPE_CHARACTER = "Escape Character";
