@@ -77,12 +77,19 @@ The processors will appear under the `com.gisfederal.gpudb.processors.GPUdbNiFi`
 
 ### Expression Language & Parameter Context
 
-All non-sensitive, non-boolean properties support **Expression Language** (`${ENV_VAR}`) with `ENVIRONMENT` scope and **NiFi Parameter Context** (`#{param}`).
+All non-sensitive, non-boolean properties support **Expression Language** (`${ENV_VAR}`) with `FLOWFILE_ATTRIBUTES` scope and **NiFi Parameter Context** (`#{param}`).
 
 - `#{param}` works on ALL properties (including Password — resolved by NiFi before EL)
-- `${ENV_VAR}` works on properties with ENVIRONMENT scope (Server URL, Table Name, Batch Size, etc.)
+- `${attr}` / `${ENV_VAR}` works on properties with FLOWFILE_ATTRIBUTES scope
 - Password: No EL (sensitive), but `#{param}` works
 - Boolean flags: No EL (validator incompatible), but `#{param}` works
+
+### Common Connection Properties (all processors)
+
+| Property | Required | Default | EL | Description |
+|----------|----------|---------|-----|-------------|
+| Disable Auto Discovery | No | `false` | ❌ | Disable automatic cluster node discovery. Set to `true` when connecting through a proxy or load balancer where internal cluster IPs are not reachable |
+| Disable Failover | No | `false` | ❌ | Disable automatic failover to other cluster nodes. Set to `true` when using a single-endpoint proxy |
 
 ### PutKinetica
 

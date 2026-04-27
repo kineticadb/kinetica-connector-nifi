@@ -18,6 +18,7 @@
     -   Nullable detection from Avro union types (`["null", "type"]`)
     -   Logical type support: `timestamp-millis`, `timestamp-micros`, `date`, `time-millis`, `time-micros`, `decimal`
     -   Resolution priority: existing table → pipe-delimited Schema → Avro Schema → fallback
+-   **Disable Auto Discovery** and **Disable Failover** boolean properties on all 10 processors — eliminates internal cluster IP timeout warnings when connecting through proxies/load balancers
 -   Expression Language support (FLOWFILE_ATTRIBUTES scope) on all non-sensitive, non-boolean properties
 -   NiFi Parameter Context support (`#{param}`) on all properties
 -   Custom validation on Query processors: exactly one of Table Name or SQL Query must be set
