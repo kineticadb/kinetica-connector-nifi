@@ -140,6 +140,22 @@ public class PutKineticaFromCSV extends AbstractProcessor {
         .description("Password to connect to Kinetica").required(false)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).sensitive(true).build();
 
+    public static final PropertyDescriptor PROP_DISABLE_AUTO_DISCOVERY = new PropertyDescriptor.Builder()
+        .name(KineticaConstants.DISABLE_AUTO_DISCOVERY)
+        .description("Disable automatic cluster discovery. Set to true when connecting through a proxy or load balancer where internal cluster IPs are not reachable.")
+        .required(false)
+        .defaultValue("false")
+        .allowableValues("true", "false")
+        .build();
+
+    public static final PropertyDescriptor PROP_DISABLE_FAILOVER = new PropertyDescriptor.Builder()
+        .name(KineticaConstants.DISABLE_FAILOVER)
+        .description("Disable automatic failover to other cluster nodes. Set to true when using a single-endpoint proxy.")
+        .required(false)
+        .defaultValue("false")
+        .allowableValues("true", "false")
+        .build();
+
     protected static final PropertyDescriptor UPDATE_ON_EXISTING_PK = new PropertyDescriptor.Builder()
         .name( KineticaConstants.UPDATE_ON_EXISTING_PK )
         .description(
@@ -211,6 +227,8 @@ public class PutKineticaFromCSV extends AbstractProcessor {
         descriptors.add(PROP_ERROR_HANDLING);
         descriptors.add(PROP_USERNAME);
         descriptors.add(PROP_PASSWORD);
+        descriptors.add(PROP_DISABLE_AUTO_DISCOVERY);
+        descriptors.add(PROP_DISABLE_FAILOVER);
         descriptors.add(UPDATE_ON_EXISTING_PK);
         descriptors.add(PROP_REPLICATE_TABLE);
         descriptors.add(PROP_DATE_FORMAT);
@@ -482,6 +500,12 @@ public class PutKineticaFromCSV extends AbstractProcessor {
                 && context.getProperty(PROP_PASSWORD).getValue() != null) {
             option.setUsername(context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue());
             option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
+        }
+        if (context.getProperty(PROP_DISABLE_AUTO_DISCOVERY).asBoolean()) {
+            option.setDisableAutoDiscovery(true);
+        }
+        if (context.getProperty(PROP_DISABLE_FAILOVER).asBoolean()) {
+            option.setDisableFailover(true);
         }
         // Create a connection to the Kinetica server
         gpudb = new GPUdb(context.getProperty(PROP_SERVER).evaluateAttributeExpressions().getValue(), option);

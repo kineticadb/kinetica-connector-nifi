@@ -39,6 +39,10 @@ public final class KineticaConstants {
 
     public static final String REPLICATE_TABLE = "Replicate Table";
 
+    public static final String DISABLE_AUTO_DISCOVERY = "Disable Auto Discovery";
+
+    public static final String DISABLE_FAILOVER = "Disable Failover";
+
     public static final String DATE_FORMAT = "Date Format";
 
     public static final String TIMEZONE = "Timezone";

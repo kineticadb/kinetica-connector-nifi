@@ -100,6 +100,22 @@ public class PutKinetica extends AbstractProcessor {
         .description("Password to connect to Kinetica").required(false)
         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR).sensitive(true).build();
 
+    public static final PropertyDescriptor PROP_DISABLE_AUTO_DISCOVERY = new PropertyDescriptor.Builder()
+        .name(KineticaConstants.DISABLE_AUTO_DISCOVERY)
+        .description("Disable automatic cluster discovery. Set to true when connecting through a proxy or load balancer where internal cluster IPs are not reachable.")
+        .required(false)
+        .defaultValue("false")
+        .allowableValues("true", "false")
+        .build();
+
+    public static final PropertyDescriptor PROP_DISABLE_FAILOVER = new PropertyDescriptor.Builder()
+        .name(KineticaConstants.DISABLE_FAILOVER)
+        .description("Disable automatic failover to other cluster nodes. Set to true when using a single-endpoint proxy.")
+        .required(false)
+        .defaultValue("false")
+        .allowableValues("true", "false")
+        .build();
+
     protected static final PropertyDescriptor UPDATE_ON_EXISTING_PK = new PropertyDescriptor.Builder()
         .name( KineticaConstants.UPDATE_ON_EXISTING_PK )
         .description(
@@ -163,6 +179,8 @@ public class PutKinetica extends AbstractProcessor {
         descriptorList.add(PROP_BATCH_SIZE);
         descriptorList.add(PROP_USERNAME);
         descriptorList.add(PROP_PASSWORD);
+        descriptorList.add(PROP_DISABLE_AUTO_DISCOVERY);
+        descriptorList.add(PROP_DISABLE_FAILOVER);
         descriptorList.add(UPDATE_ON_EXISTING_PK);
         descriptorList.add(PROP_REPLICATE_TABLE);
         descriptorList.add(PROP_DATE_FORMAT);
@@ -434,6 +452,12 @@ public class PutKinetica extends AbstractProcessor {
                 && context.getProperty(PROP_PASSWORD).getValue() != null) {
             option.setUsername(context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue());
             option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
+        }
+        if (context.getProperty(PROP_DISABLE_AUTO_DISCOVERY).asBoolean()) {
+            option.setDisableAutoDiscovery(true);
+        }
+        if (context.getProperty(PROP_DISABLE_FAILOVER).asBoolean()) {
+            option.setDisableFailover(true);
         }
         gpudb = new GPUdb(context.getProperty(PROP_SERVER).evaluateAttributeExpressions().getValue(), option);
         tableName = context.getProperty(PROP_TABLE).evaluateAttributeExpressions().getValue();

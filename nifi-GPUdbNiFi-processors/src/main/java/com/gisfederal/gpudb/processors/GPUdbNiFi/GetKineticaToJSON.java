@@ -94,6 +94,22 @@ public class GetKineticaToJSON extends AbstractProcessor {
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .sensitive(true)
             .build();
+
+    public static final PropertyDescriptor PROP_DISABLE_AUTO_DISCOVERY = new PropertyDescriptor.Builder()
+            .name(KineticaConstants.DISABLE_AUTO_DISCOVERY)
+            .description("Disable automatic cluster discovery. Set to true when connecting through a proxy or load balancer where internal cluster IPs are not reachable.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .build();
+
+    public static final PropertyDescriptor PROP_DISABLE_FAILOVER = new PropertyDescriptor.Builder()
+            .name(KineticaConstants.DISABLE_FAILOVER)
+            .description("Disable automatic failover to other cluster nodes. Set to true when using a single-endpoint proxy.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .build();
     
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
             .name( KineticaConstants.SUCCESS )
@@ -116,6 +132,8 @@ public class GetKineticaToJSON extends AbstractProcessor {
         descriptorsList.add(PROP_OBJECT_MONITOR);  
         descriptorsList.add(PROP_USERNAME);
         descriptorsList.add(PROP_PASSWORD);
+        descriptorsList.add(PROP_DISABLE_AUTO_DISCOVERY);
+        descriptorsList.add(PROP_DISABLE_FAILOVER);
         
         this.descriptors = Collections.unmodifiableList(descriptorsList);
 
@@ -141,6 +159,12 @@ public class GetKineticaToJSON extends AbstractProcessor {
         if (context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue() != null && context.getProperty(PROP_PASSWORD).getValue() != null) {
             option.setUsername(context.getProperty(PROP_USERNAME).evaluateAttributeExpressions().getValue());
             option.setPassword(context.getProperty(PROP_PASSWORD).getValue());
+        }
+        if (context.getProperty(PROP_DISABLE_AUTO_DISCOVERY).asBoolean()) {
+            option.setDisableAutoDiscovery(true);
+        }
+        if (context.getProperty(PROP_DISABLE_FAILOVER).asBoolean()) {
+            option.setDisableFailover(true);
         }
         gpudb = new GPUdb(context.getProperty(PROP_SERVER).evaluateAttributeExpressions().getValue(), option);
         
