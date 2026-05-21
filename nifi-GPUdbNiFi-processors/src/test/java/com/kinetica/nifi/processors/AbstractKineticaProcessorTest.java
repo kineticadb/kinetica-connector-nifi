@@ -135,6 +135,56 @@ public class AbstractKineticaProcessorTest {
         testRunner.assertValid();
     }
 
+    // ========== SSL/TLS Tests ==========
+
+    @Test
+    public void testSSLProperties() {
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SERVER, "https://localhost:9191");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_TABLE, "test_table");
+
+        // SSL enabled
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_USE_SSL, "true");
+        testRunner.assertValid();
+
+        // Bypass cert check (for self-signed certs)
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SSL_BYPASS_CERT_CHECK, "true");
+        testRunner.assertValid();
+    }
+
+    @Test
+    public void testSSLDisabled() {
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SERVER, "http://localhost:9191");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_TABLE, "test_table");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_USE_SSL, "false");
+        testRunner.assertValid();
+    }
+
+    // ========== Connection Timeout Tests ==========
+
+    @Test
+    public void testConnectionTimeoutProperties() {
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SERVER, "http://localhost:9191");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_TABLE, "test_table");
+
+        // Custom connection timeout
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_CONNECTION_TIMEOUT, "45 sec");
+        testRunner.assertValid();
+
+        // Custom socket timeout
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SOCKET_TIMEOUT, "120 sec");
+        testRunner.assertValid();
+    }
+
+    @Test
+    public void testConnectionPoolSizeProperty() {
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SERVER, "http://localhost:9191");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_TABLE, "test_table");
+
+        // Custom pool size
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_CONNECTION_POOL_SIZE, "8");
+        testRunner.assertValid();
+    }
+
     @Test
     public void testProcessorHasExpectedRelationships() {
         TestableKineticaProcessor processor = (TestableKineticaProcessor) testRunner.getProcessor();
@@ -154,5 +204,12 @@ public class AbstractKineticaProcessorTest {
         assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_TABLE));
         assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_USERNAME));
         assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_PASSWORD));
+        // Should have SSL properties
+        assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_USE_SSL));
+        assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_SSL_BYPASS_CERT_CHECK));
+        // Should have connection properties
+        assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_CONNECTION_TIMEOUT));
+        assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_SOCKET_TIMEOUT));
+        assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_CONNECTION_POOL_SIZE));
     }
 }

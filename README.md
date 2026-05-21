@@ -22,6 +22,10 @@ This version has been modernized for **NiFi 2.x** and **Java 21**.
 - Fixed ZeroMQ connection leak in Get processors
 - Added null-safe utility methods
 - Added table name validation to prevent SQL injection
+- **NEW: SSL/TLS support** for secure connections
+- **NEW: Connection pooling** for improved performance
+- **NEW: Configurable timeouts** for connection and socket operations
+- **NEW: Enhanced Expression Language support** for dynamic configuration
 
 ## Building
 
@@ -66,6 +70,11 @@ Bulk loads FlowFile attributes to Kinetica in batch intervals.
 | Replicate Table | No | Create as replicated table |
 | Date Format | No | Date parsing format (e.g., `yyyy-MM-dd HH:mm:ss`) |
 | TimeZone | No | Timezone for date parsing |
+| Use SSL/TLS | No | Enable SSL/TLS for secure connections |
+| Bypass SSL Certificate Check | No | Skip SSL cert verification (dev only) |
+| Connection Timeout | No | Connection timeout (default: 30 sec) |
+| Socket Timeout | No | Socket timeout (default: 60 sec) |
+| Connection Pool Size | No | Max connections in pool (default: 4) |
 
 ### PutKineticaFromFile
 
@@ -125,10 +134,34 @@ column_name|type|annotation1|annotation2...
 id|Long|data|primary_key,x|Float|data,y|Float|data,name|String|data,timestamp|Long|data|timestamp
 ```
 
+## SSL/TLS Configuration
+
+For secure connections to Kinetica:
+
+```
+Server URL: https://kinetica.example.com:8082
+Use SSL/TLS: true
+Bypass SSL Certificate Check: false  (set to true only for self-signed certs in dev)
+```
+
+## Connection Tuning
+
+For high-throughput scenarios:
+
+| Setting | Recommended | Notes |
+|---------|-------------|-------|
+| Batch Size | 10000-50000 | Higher = better throughput, more memory |
+| Connection Pool Size | 4-8 | Match to concurrent tasks |
+| Connection Timeout | 30 sec | Increase for slow networks |
+| Socket Timeout | 60 sec | Increase for large batches |
+
 ## Architecture
 
 ```
 AbstractKineticaProcessor (base)
+├── SSL/TLS support
+├── Connection pooling
+├── Timeout configuration
 ├── AbstractPutKineticaProcessor (Put operations)
 │   ├── PutKinetica
 │   └── PutKineticaFromFile

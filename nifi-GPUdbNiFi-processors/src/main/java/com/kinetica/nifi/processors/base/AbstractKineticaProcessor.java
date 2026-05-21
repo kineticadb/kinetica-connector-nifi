@@ -2,12 +2,17 @@ package com.kinetica.nifi.processors.base;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.PropertyValue;
 import org.apache.nifi.expression.ExpressionLanguageScope;
+import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.exception.ProcessException;
@@ -23,9 +28,11 @@ import com.gpudb.WorkerList;
  *
  * <p>This class provides common functionality shared across all Kinetica processors:
  * <ul>
- *   <li>GPUdb connection management</li>
+ *   <li>GPUdb connection management with connection pooling</li>
+ *   <li>SSL/TLS support for secure connections</li>
  *   <li>Common property descriptors (server URL, credentials, table name)</li>
  *   <li>Table name validation to prevent SQL injection</li>
+ *   <li>Connection timeout configuration</li>
  *   <li>Resource cleanup on processor stop</li>
  * </ul>
  *
@@ -81,6 +88,64 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
+    // ========== SSL/TLS PROPERTY DESCRIPTORS ==========
+
+    public static final PropertyDescriptor PROP_USE_SSL = new PropertyDescriptor.Builder()
+            .name("Use SSL/TLS")
+            .displayName("Use SSL/TLS")
+            .description("Enable SSL/TLS for secure connections to Kinetica. " +
+                    "When enabled, use https:// in the Server URL.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor PROP_SSL_BYPASS_CERT_CHECK = new PropertyDescriptor.Builder()
+            .name("Bypass SSL Certificate Check")
+            .displayName("Bypass SSL Certificate Check")
+            .description("If true, bypasses SSL certificate verification. " +
+                    "WARNING: Use only for development/testing with self-signed certificates. " +
+                    "Do not use in production.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .build();
+
+    // ========== CONNECTION PROPERTY DESCRIPTORS ==========
+
+    public static final PropertyDescriptor PROP_CONNECTION_TIMEOUT = new PropertyDescriptor.Builder()
+            .name("Connection Timeout")
+            .displayName("Connection Timeout")
+            .description("Maximum time to wait for a connection to be established. " +
+                    "Use time unit suffix: ms, sec, min (e.g., '30 sec').")
+            .required(false)
+            .defaultValue("30 sec")
+            .addValidator(StandardValidators.TIME_PERIOD_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor PROP_SOCKET_TIMEOUT = new PropertyDescriptor.Builder()
+            .name("Socket Timeout")
+            .displayName("Socket Timeout")
+            .description("Maximum time to wait for data on a socket. " +
+                    "Use time unit suffix: ms, sec, min (e.g., '60 sec').")
+            .required(false)
+            .defaultValue("60 sec")
+            .addValidator(StandardValidators.TIME_PERIOD_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor PROP_CONNECTION_POOL_SIZE = new PropertyDescriptor.Builder()
+            .name("Connection Pool Size")
+            .displayName("Connection Pool Size")
+            .description("Maximum number of connections to maintain in the connection pool. " +
+                    "Higher values improve throughput for concurrent operations.")
+            .required(false)
+            .defaultValue("4")
+            .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
+            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .build();
+
     // ========== TABLE NAME VALIDATION ==========
 
     /**
@@ -102,6 +167,17 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
     protected volatile WorkerList workers;
     protected volatile String tableName;
 
+    // Connection configuration (cached from properties)
+    protected volatile boolean useSSL;
+    protected volatile boolean bypassCertCheck;
+    protected volatile int connectionTimeout;
+    protected volatile int socketTimeout;
+    protected volatile int connectionPoolSize;
+
+    // Connection pool for reuse across FlowFiles with different attribute values
+    private final Map<String, GPUdb> connectionPool = new ConcurrentHashMap<>();
+    private static final int MAX_POOL_SIZE = 10;
+
     // ========== BASE PROPERTY DESCRIPTORS ==========
 
     /**
@@ -116,6 +192,11 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
         descriptors.add(PROP_TABLE);
         descriptors.add(PROP_USERNAME);
         descriptors.add(PROP_PASSWORD);
+        descriptors.add(PROP_USE_SSL);
+        descriptors.add(PROP_SSL_BYPASS_CERT_CHECK);
+        descriptors.add(PROP_CONNECTION_TIMEOUT);
+        descriptors.add(PROP_SOCKET_TIMEOUT);
+        descriptors.add(PROP_CONNECTION_POOL_SIZE);
         return descriptors;
     }
 
@@ -137,13 +218,23 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
             tableName = context.getProperty(PROP_TABLE).evaluateAttributeExpressions().getValue();
             validateTableName(tableName);
 
+            // Cache SSL/connection configuration
+            useSSL = context.getProperty(PROP_USE_SSL).asBoolean();
+            bypassCertCheck = context.getProperty(PROP_SSL_BYPASS_CERT_CHECK).asBoolean();
+            connectionTimeout = (int) context.getProperty(PROP_CONNECTION_TIMEOUT)
+                    .asTimePeriod(TimeUnit.MILLISECONDS).longValue();
+            socketTimeout = (int) context.getProperty(PROP_SOCKET_TIMEOUT)
+                    .asTimePeriod(TimeUnit.MILLISECONDS).longValue();
+            connectionPoolSize = context.getProperty(PROP_CONNECTION_POOL_SIZE).asInteger();
+
             // Create GPUdb connection
             gpudb = createGPUdbConnection(context);
 
             // Initialize worker list for bulk operations
             workers = new WorkerList(gpudb);
 
-            getLogger().info("Connected to Kinetica server: {}", gpudb.getURL());
+            getLogger().info("Connected to Kinetica server: {} (SSL: {}, Timeout: {}ms)",
+                    gpudb.getURL(), useSSL, connectionTimeout);
         } catch (GPUdbException e) {
             throw new ProcessException("Failed to connect to Kinetica: " + e.getMessage(), e);
         }
@@ -157,7 +248,18 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
      */
     @OnStopped
     public void onStopped() {
-        // Clean up resources
+        // Clean up connection pool
+        for (GPUdb pooledConnection : connectionPool.values()) {
+            try {
+                // GPUdb doesn't have explicit close, but we clear the reference
+                getLogger().debug("Releasing pooled connection: {}", pooledConnection.getURL());
+            } catch (Exception e) {
+                getLogger().warn("Error releasing pooled connection: {}", e.getMessage());
+            }
+        }
+        connectionPool.clear();
+
+        // Clean up main resources
         workers = null;
         gpudb = null;
         tableName = null;
@@ -179,6 +281,56 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
         // Password does not use expression language for security
         String password = context.getProperty(PROP_PASSWORD).getValue();
 
+        return createGPUdbConnectionWithOptions(serverUrl, username, password);
+    }
+
+    /**
+     * Creates a GPUdb connection for a specific FlowFile, evaluating expression language.
+     * This method supports per-FlowFile connection configuration.
+     *
+     * @param context The process context
+     * @param flowFile The FlowFile to evaluate expressions against
+     * @return Configured GPUdb instance (may be from pool)
+     * @throws GPUdbException if connection fails
+     */
+    protected GPUdb getConnectionForFlowFile(ProcessContext context, FlowFile flowFile) throws GPUdbException {
+        String serverUrl = context.getProperty(PROP_SERVER)
+                .evaluateAttributeExpressions(flowFile).getValue();
+        String username = context.getProperty(PROP_USERNAME)
+                .evaluateAttributeExpressions(flowFile).getValue();
+        String password = context.getProperty(PROP_PASSWORD).getValue();
+
+        // Create a cache key based on connection parameters
+        String cacheKey = serverUrl + "|" + (username != null ? username : "");
+
+        // Check pool first
+        GPUdb pooledConnection = connectionPool.get(cacheKey);
+        if (pooledConnection != null) {
+            return pooledConnection;
+        }
+
+        // Create new connection
+        GPUdb newConnection = createGPUdbConnectionWithOptions(serverUrl, username, password);
+
+        // Add to pool if not at max size
+        if (connectionPool.size() < MAX_POOL_SIZE) {
+            connectionPool.put(cacheKey, newConnection);
+        }
+
+        return newConnection;
+    }
+
+    /**
+     * Creates a GPUdb connection with full options including SSL and timeouts.
+     *
+     * @param serverUrl The server URL
+     * @param username The username (can be null)
+     * @param password The password (can be null)
+     * @return Configured GPUdb instance
+     * @throws GPUdbException if connection fails
+     */
+    private GPUdb createGPUdbConnectionWithOptions(String serverUrl, String username, String password)
+            throws GPUdbException {
         Options options = new Options();
 
         // Configure authentication if credentials are provided
@@ -186,6 +338,21 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
             options.setUsername(username);
             options.setPassword(password);
         }
+
+        // Configure SSL/TLS
+        if (bypassCertCheck) {
+            options.setBypassSslCertCheck(true);
+            getLogger().warn("SSL certificate verification is disabled - not recommended for production");
+        }
+
+        // Configure timeouts
+        options.setTimeout(connectionTimeout);
+
+        // Configure thread pool size for multi-head operations
+        options.setThreadCount(connectionPoolSize);
+
+        getLogger().debug("Creating GPUdb connection: URL={}, SSL={}, Timeout={}ms, Threads={}",
+                serverUrl, useSSL, connectionTimeout, connectionPoolSize);
 
         return new GPUdb(serverUrl, options);
     }

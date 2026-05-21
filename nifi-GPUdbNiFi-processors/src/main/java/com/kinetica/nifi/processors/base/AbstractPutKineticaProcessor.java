@@ -70,9 +70,11 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
             .name("Batch Size")
             .displayName("Batch Size")
             .description("Number of records to batch before flushing to Kinetica. " +
-                    "Higher values improve throughput but use more memory.")
+                    "Higher values improve throughput but use more memory. " +
+                    "Supports Expression Language (evaluated at processor startup).")
             .required(true)
             .defaultValue("500")
+            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
             .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
             .build();
 
@@ -193,7 +195,7 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
         updateOnExistingPk = context.getProperty(PROP_UPDATE_ON_EXISTING_PK).asBoolean();
         dateFormat = context.getProperty(PROP_DATE_FORMAT).evaluateAttributeExpressions().getValue();
         timeZone = context.getProperty(PROP_TIMEZONE).evaluateAttributeExpressions().getValue();
-        batchSize = context.getProperty(PROP_BATCH_SIZE).asInteger();
+        batchSize = context.getProperty(PROP_BATCH_SIZE).evaluateAttributeExpressions().asInteger();
 
         // Get or create table type
         try {
