@@ -1,0 +1,8 @@
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/main/java/com/kinetica/nifi/processors/PutKineticaFromFile.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/main/java/com/kinetica/nifi/processors/base/AbstractPutKineticaProcessor.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/main/java/com/kinetica/nifi/processors/base/AbstractKineticaProcessor.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/main/java/com/kinetica/nifi/processors/KineticaUtilities.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/main/java/com/kinetica/nifi/processors/base/AbstractGetKineticaProcessor.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/main/java/com/kinetica/nifi/processors/PutKinetica.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/main/java/com/kinetica/nifi/processors/GetKineticaToCSV.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/main/java/com/kinetica/nifi/processors/GetKineticaToJSON.java

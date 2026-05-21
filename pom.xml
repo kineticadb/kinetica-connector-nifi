@@ -1,52 +1,188 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>org.apache.nifi</groupId>
-        <artifactId>nifi-nar-bundles</artifactId>
-        <version>1.3.0</version>
-    </parent>
+
     <groupId>com.gpudb</groupId>
     <artifactId>GPUdbNiFiConnector</artifactId>
-    <version>7.1.0.0</version>
+    <version>7.2.0.0</version>
     <packaging>pom</packaging>
+
+    <name>Kinetica NiFi Connector</name>
+    <description>Apache NiFi processors for Kinetica database integration</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!-- Java 21 required for NiFi 2.x -->
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <!-- NiFi 2.x -->
+        <nifi.version>2.0.0</nifi.version>
+        <!-- Kinetica API version -->
+        <kinetica.version>7.2.3.18</kinetica.version>
+        <!-- Dependency versions -->
+        <avro.version>1.11.3</avro.version>
+        <commons-csv.version>1.10.0</commons-csv.version>
+        <jeromq.version>0.6.0</jeromq.version>
+        <slf4j.version>2.0.9</slf4j.version>
+        <junit.version>4.13.2</junit.version>
+    </properties>
+
     <modules>
         <module>nifi-GPUdbNiFi-processors</module>
         <module>nifi-GPUdbNiFi-nar</module>
     </modules>
+
     <distributionManagement>
-       <repository>
-          <id>releases</id>
-          <name>Releases</name>
-          <url>http://files.kinetica.com/nexus/content/repositories/releases</url>
-       </repository>
-       <snapshotRepository>
-          <id>snapshots</id>
-          <name>Snapshots</name>
-          <url>http://files.kinetica.com/nexus/content/repositories/snapshots</url>
-       </snapshotRepository>
+        <repository>
+            <id>releases</id>
+            <name>Releases</name>
+            <url>https://files.kinetica.com/nexus/content/repositories/releases</url>
+        </repository>
+        <snapshotRepository>
+            <id>snapshots</id>
+            <name>Snapshots</name>
+            <url>https://files.kinetica.com/nexus/content/repositories/snapshots</url>
+        </snapshotRepository>
     </distributionManagement>
+
     <repositories>
+        <!-- Maven Central - priority for non-Kinetica artifacts -->
         <repository>
-            <id>gisfed-releases</id>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo.maven.apache.org/maven2</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+        <!-- Kinetica repositories for gpudb-api only -->
+        <repository>
+            <id>kinetica-releases</id>
             <name>Kinetica Release Nexus</name>
-            <url>http://files.kinetica.com/nexus/content/repositories/releases/</url>
+            <url>https://files.kinetica.com/nexus/content/repositories/releases/</url>
+            <releases>
+                <enabled>true</enabled>
+                <checksumPolicy>warn</checksumPolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
         </repository>
         <repository>
-            <id>gisfed-snapshots</id>
+            <id>kinetica-snapshots</id>
             <name>Kinetica Snapshot Nexus</name>
-            <url>http://files.kinetica.com/nexus/content/repositories/snapshots/</url>
-        </repository>
-        <repository>
-            <id>gisfed-releases-thirdparty</id>
-            <url>http://files.kinetica.com/nexus/content/repositories/thirdparty/</url>
+            <url>https://files.kinetica.com/nexus/content/repositories/snapshots/</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
         </repository>
     </repositories>
-    <dependencies>
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-            <version>1.8.1</version>
-        </dependency>    
-    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- NiFi dependencies -->
+            <dependency>
+                <groupId>org.apache.nifi</groupId>
+                <artifactId>nifi-api</artifactId>
+                <version>${nifi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.nifi</groupId>
+                <artifactId>nifi-utils</artifactId>
+                <version>${nifi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.nifi</groupId>
+                <artifactId>nifi-mock</artifactId>
+                <version>${nifi.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- Kinetica -->
+            <dependency>
+                <groupId>com.gpudb</groupId>
+                <artifactId>gpudb-api</artifactId>
+                <version>${kinetica.version}</version>
+            </dependency>
+
+            <!-- Apache Commons -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-csv</artifactId>
+                <version>${commons-csv.version}</version>
+            </dependency>
+
+            <!-- Avro -->
+            <dependency>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro</artifactId>
+                <version>${avro.version}</version>
+            </dependency>
+
+            <!-- ZeroMQ -->
+            <dependency>
+                <groupId>org.zeromq</groupId>
+                <artifactId>jeromq</artifactId>
+                <version>${jeromq.version}</version>
+            </dependency>
+
+            <!-- Logging -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-simple</artifactId>
+                <version>${slf4j.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- Testing -->
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.11.0</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.nifi</groupId>
+                    <artifactId>nifi-nar-maven-plugin</artifactId>
+                    <version>2.0.0</version>
+                    <extensions>true</extensions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.2</version>
+                    <configuration>
+                        <redirectTestOutputToFile>true</redirectTestOutputToFile>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>

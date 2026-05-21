@@ -1,0 +1,11 @@
+com/kinetica/nifi/processors/base/AbstractGetKineticaProcessor.class
+com/kinetica/nifi/processors/GetKineticaToCSV$1.class
+com/kinetica/nifi/processors/KineticaUtilities.class
+com/kinetica/nifi/processors/PutKineticaFromFile$1.class
+com/kinetica/nifi/processors/PutKinetica.class
+com/kinetica/nifi/processors/GetKineticaToCSV.class
+com/kinetica/nifi/processors/base/AbstractKineticaProcessor.class
+com/kinetica/nifi/processors/GetKineticaToJSON.class
+com/kinetica/nifi/processors/GetKineticaToJSON$1.class
+com/kinetica/nifi/processors/base/AbstractPutKineticaProcessor.class
+com/kinetica/nifi/processors/PutKineticaFromFile.class
