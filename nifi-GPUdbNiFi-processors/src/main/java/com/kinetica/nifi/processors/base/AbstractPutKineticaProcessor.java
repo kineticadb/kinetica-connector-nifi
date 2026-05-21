@@ -6,6 +6,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
@@ -25,6 +28,7 @@ import com.gpudb.Type;
 import com.gpudb.Type.Column;
 import com.gpudb.protocol.CreateTableRequest;
 import com.gpudb.protocol.InsertRecordsRequest;
+import com.kinetica.nifi.processors.KineticaUtilities;
 
 /**
  * Abstract base class for Kinetica Put processors (PutKinetica, PutKineticaFromFile, etc.).
@@ -33,7 +37,8 @@ import com.gpudb.protocol.InsertRecordsRequest;
  * writing data to Kinetica:
  * <ul>
  *   <li>Schema definition and table creation</li>
- *   <li>BulkInserter management</li>
+ *   <li>Thread-safe BulkInserter management</li>
+ *   <li>Retry logic with exponential backoff</li>
  *   <li>Common Put processor properties (batch size, schema, collection)</li>
  *   <li>Type/schema parsing and creation</li>
  * </ul>
@@ -129,6 +134,20 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
             .description("FlowFiles that failed to be written to Kinetica")
             .build();
 
+    // ========== RETRY CONFIGURATION ==========
+
+    /** Maximum number of retry attempts for transient failures */
+    protected static final int MAX_RETRY_ATTEMPTS = 3;
+
+    /** Base delay in milliseconds for exponential backoff */
+    protected static final long BASE_RETRY_DELAY_MS = 100;
+
+    /** Maximum delay in milliseconds for exponential backoff */
+    protected static final long MAX_RETRY_DELAY_MS = 5000;
+
+    /** Jitter factor for retry delays (0.0 to 1.0) */
+    protected static final double RETRY_JITTER_FACTOR = 0.25;
+
     // ========== SHARED STATE ==========
 
     protected volatile Type objectType;
@@ -136,6 +155,12 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
     protected volatile String dateFormat;
     protected volatile String timeZone;
     protected volatile int batchSize;
+
+    /** Lock for thread-safe BulkInserter operations */
+    private final ReentrantLock bulkInserterLock = new ReentrantLock();
+
+    /** Shared BulkInserter instance for batch operations */
+    private volatile BulkInserter<Record> sharedBulkInserter;
 
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
@@ -217,6 +242,21 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
     @Override
     @OnStopped
     public void onStopped() {
+        // Flush and close the shared BulkInserter
+        bulkInserterLock.lock();
+        try {
+            if (sharedBulkInserter != null) {
+                try {
+                    sharedBulkInserter.flush();
+                } catch (GPUdbException e) {
+                    getLogger().warn("Error flushing BulkInserter during shutdown: {}", e.getMessage());
+                }
+                sharedBulkInserter = null;
+            }
+        } finally {
+            bulkInserterLock.unlock();
+        }
+
         objectType = null;
         super.onStopped();
     }
@@ -391,5 +431,278 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
      */
     protected Type getObjectType() {
         return objectType;
+    }
+
+    // ========== COLUMN VALUE CONVERSION ==========
+
+    /**
+     * Sets a column value on a record with automatic type conversion.
+     *
+     * <p>This method centralizes type conversion logic used across all Put processors.
+     * It handles null values, timestamps, and all supported Kinetica data types.
+     *
+     * @param record The record to update
+     * @param column The column metadata
+     * @param value The string value to convert and set
+     * @return true if value was set successfully, false if parsing failed
+     */
+    protected boolean setColumnValue(Record record, Column column, String value) {
+        String columnName = column.getName();
+
+        // Handle null or empty values
+        if (value == null || value.trim().isEmpty()) {
+            if (column.isNullable()) {
+                record.put(columnName, null);
+            }
+            // For non-nullable columns, leave as default
+            return true;
+        }
+
+        String trimmed = value.trim();
+
+        // Check if this is a timestamp column
+        boolean isTimestamp = KineticaUtilities.checkForTimeStamp(column);
+
+        try {
+            if (isTimestamp) {
+                // Handle timestamp values
+                Long timestamp = KineticaUtilities.parseDateOrTimestamp(trimmed, dateFormat, timeZone, getLogger());
+                if (timestamp != null) {
+                    record.put(columnName, timestamp);
+                } else {
+                    getLogger().warn("Failed to parse timestamp '{}' for column '{}'", value, columnName);
+                    return false;
+                }
+            } else if (column.getType() == Double.class) {
+                record.put(columnName, KineticaUtilities.parseDoubleSafe(trimmed, 0.0));
+            } else if (column.getType() == Float.class) {
+                record.put(columnName, KineticaUtilities.parseFloatSafe(trimmed, 0.0f));
+            } else if (column.getType() == Integer.class) {
+                record.put(columnName, KineticaUtilities.parseIntSafe(trimmed, 0));
+            } else if (column.getType() == Long.class) {
+                record.put(columnName, KineticaUtilities.parseLongSafe(trimmed, 0L));
+            } else {
+                // String type
+                String cleanValue = KineticaUtilities.trimToNull(value);
+                if (cleanValue != null) {
+                    record.put(columnName, cleanValue);
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            getLogger().error("Error setting value '{}' for column '{}': {}", value, columnName, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Creates a new empty record from the table type.
+     *
+     * @return A new Record instance, or null if objectType is not set
+     */
+    protected Record createEmptyRecord() {
+        if (objectType == null) {
+            getLogger().error("Object type is null, cannot create record");
+            return null;
+        }
+        return objectType.newInstance();
+    }
+
+    // ========== THREAD-SAFE BULK INSERTER ACCESS ==========
+
+    /**
+     * Gets or creates the shared BulkInserter instance in a thread-safe manner.
+     *
+     * @return The shared BulkInserter
+     * @throws GPUdbException if creation fails
+     */
+    protected BulkInserter<Record> getOrCreateBulkInserter() throws GPUdbException {
+        // Fast path: check without lock
+        BulkInserter<Record> inserter = sharedBulkInserter;
+        if (inserter != null) {
+            return inserter;
+        }
+
+        // Slow path: acquire lock and create if needed
+        bulkInserterLock.lock();
+        try {
+            // Double-check after acquiring lock
+            if (sharedBulkInserter == null) {
+                sharedBulkInserter = createBulkInserter();
+            }
+            return sharedBulkInserter;
+        } finally {
+            bulkInserterLock.unlock();
+        }
+    }
+
+    /**
+     * Inserts a record using the shared BulkInserter with thread safety.
+     *
+     * @param record The record to insert
+     * @throws GPUdbException if insertion fails
+     */
+    protected void insertRecord(Record record) throws GPUdbException {
+        BulkInserter<Record> inserter = getOrCreateBulkInserter();
+        bulkInserterLock.lock();
+        try {
+            inserter.insert(record);
+        } finally {
+            bulkInserterLock.unlock();
+        }
+    }
+
+    /**
+     * Flushes the shared BulkInserter with thread safety.
+     *
+     * @throws GPUdbException if flush fails
+     */
+    protected void flushBulkInserter() throws GPUdbException {
+        bulkInserterLock.lock();
+        try {
+            if (sharedBulkInserter != null) {
+                sharedBulkInserter.flush();
+            }
+        } finally {
+            bulkInserterLock.unlock();
+        }
+    }
+
+    // ========== RETRY LOGIC WITH EXPONENTIAL BACKOFF ==========
+
+    /**
+     * Executes an operation with retry logic using exponential backoff.
+     *
+     * <p>This method will retry the operation up to {@link #MAX_RETRY_ATTEMPTS} times
+     * with exponentially increasing delays between attempts. Jitter is added to
+     * prevent thundering herd problems.
+     *
+     * @param <T> The return type of the operation
+     * @param operation The operation to execute
+     * @param operationName Name of the operation for logging
+     * @return The result of the operation
+     * @throws GPUdbException if all retry attempts fail
+     */
+    protected <T> T executeWithRetry(Supplier<T> operation, String operationName) throws GPUdbException {
+        GPUdbException lastException = null;
+
+        for (int attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+            try {
+                return operation.get();
+            } catch (Exception e) {
+                // Wrap non-GPUdbException
+                if (e instanceof GPUdbException) {
+                    lastException = (GPUdbException) e;
+                } else {
+                    lastException = new GPUdbException(e.getMessage(), e);
+                }
+
+                // Check if this is a retryable error
+                if (!isRetryableError(lastException)) {
+                    getLogger().error("Non-retryable error during {}: {}", operationName, e.getMessage());
+                    throw lastException;
+                }
+
+                // Don't retry on last attempt
+                if (attempt < MAX_RETRY_ATTEMPTS) {
+                    long delay = calculateRetryDelay(attempt);
+                    getLogger().warn("Attempt {}/{} failed for {}: {}. Retrying in {}ms",
+                            attempt, MAX_RETRY_ATTEMPTS, operationName, e.getMessage(), delay);
+
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new GPUdbException("Retry interrupted", ie);
+                    }
+                }
+            }
+        }
+
+        getLogger().error("All {} retry attempts failed for {}", MAX_RETRY_ATTEMPTS, operationName);
+        throw lastException;
+    }
+
+    /**
+     * Executes a void operation with retry logic using exponential backoff.
+     *
+     * @param operation The operation to execute
+     * @param operationName Name of the operation for logging
+     * @throws GPUdbException if all retry attempts fail
+     */
+    protected void executeWithRetry(Runnable operation, String operationName) throws GPUdbException {
+        executeWithRetry(() -> {
+            operation.run();
+            return null;
+        }, operationName);
+    }
+
+    /**
+     * Calculates the retry delay with exponential backoff and jitter.
+     *
+     * @param attempt The current attempt number (1-based)
+     * @return The delay in milliseconds
+     */
+    private long calculateRetryDelay(int attempt) {
+        // Exponential backoff: baseDelay * 2^(attempt-1)
+        long exponentialDelay = BASE_RETRY_DELAY_MS * (1L << (attempt - 1));
+
+        // Cap at maximum delay
+        long cappedDelay = Math.min(exponentialDelay, MAX_RETRY_DELAY_MS);
+
+        // Add jitter: delay * (1 +/- jitterFactor * random)
+        double jitter = (ThreadLocalRandom.current().nextDouble() * 2 - 1) * RETRY_JITTER_FACTOR;
+        long finalDelay = (long) (cappedDelay * (1 + jitter));
+
+        return Math.max(finalDelay, BASE_RETRY_DELAY_MS);
+    }
+
+    /**
+     * Determines if an error is retryable.
+     *
+     * <p>Retryable errors include:
+     * <ul>
+     *   <li>Connection timeouts</li>
+     *   <li>Network errors</li>
+     *   <li>Server overload (503)</li>
+     *   <li>Rate limiting (429)</li>
+     * </ul>
+     *
+     * @param e The exception to check
+     * @return true if the error is retryable
+     */
+    protected boolean isRetryableError(GPUdbException e) {
+        String message = e.getMessage();
+        if (message == null) {
+            return false;
+        }
+
+        String lowerMessage = message.toLowerCase();
+
+        // Connection/network errors
+        if (lowerMessage.contains("connection") ||
+                lowerMessage.contains("timeout") ||
+                lowerMessage.contains("network") ||
+                lowerMessage.contains("socket")) {
+            return true;
+        }
+
+        // Server overload or rate limiting
+        if (lowerMessage.contains("503") ||
+                lowerMessage.contains("429") ||
+                lowerMessage.contains("service unavailable") ||
+                lowerMessage.contains("too many requests") ||
+                lowerMessage.contains("rate limit")) {
+            return true;
+        }
+
+        // Temporary server errors
+        if (lowerMessage.contains("temporarily") ||
+                lowerMessage.contains("try again") ||
+                lowerMessage.contains("retry")) {
+            return true;
+        }
+
+        return false;
     }
 }

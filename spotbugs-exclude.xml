@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!--
+        SpotBugs Exclusion Filter for Kinetica NiFi Connector
+
+        This file excludes certain bug patterns that are either:
+        - False positives in this context
+        - Intentional design decisions
+        - Low priority issues that don't warrant immediate attention
+    -->
+
+    <!-- Exclude test classes from certain checks -->
+    <Match>
+        <Class name="~.*Test"/>
+        <Bug pattern="URF_UNREAD_FIELD"/>
+    </Match>
+
+    <!-- Exclude serialization warnings for NiFi processors (they are not serialized) -->
+    <Match>
+        <Class name="~com\.kinetica\.nifi\.processors\..*"/>
+        <Bug pattern="SE_NO_SERIALVERSIONID"/>
+    </Match>
+    <Match>
+        <Class name="~com\.kinetica\.nifi\.processors\..*"/>
+        <Bug pattern="SE_BAD_FIELD"/>
+    </Match>
+
+    <!-- Intentional use of System.out in specific utility classes -->
+    <Match>
+        <Bug pattern="SYSTEM_OUT_USED"/>
+        <Class name="~.*Test"/>
+    </Match>
+
+    <!-- Allow inner classes in processors -->
+    <Match>
+        <Class name="~com\.kinetica\.nifi\.processors\..*\$.*"/>
+        <Bug pattern="SIC_INNER_SHOULD_BE_STATIC"/>
+    </Match>
+
+    <!-- NiFi processors use volatile fields intentionally for thread safety -->
+    <Match>
+        <Class name="~com\.kinetica\.nifi\.processors\..*"/>
+        <Bug pattern="VO_VOLATILE_INCREMENT"/>
+    </Match>
+
+    <!-- Generated code exclusions (if any) -->
+    <Match>
+        <Source name="~.*generated.*"/>
+    </Match>
+
+</FindBugsFilter>

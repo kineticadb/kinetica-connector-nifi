@@ -14,7 +14,14 @@
 # limitations under the License.
 
 # Kinetica NiFi Processors (v7.2.0.0 - NiFi 2.x compatible)
+# Put processors - write data to Kinetica
 com.kinetica.nifi.processors.PutKinetica
 com.kinetica.nifi.processors.PutKineticaFromFile
+com.kinetica.nifi.processors.PutKineticaFromJSON
+# Query processors - read data via SQL queries
+com.kinetica.nifi.processors.QueryKineticaToCSV
+com.kinetica.nifi.processors.QueryKineticaToJSON
+# Get processors - stream data from table monitors
 com.kinetica.nifi.processors.GetKineticaToCSV
 com.kinetica.nifi.processors.GetKineticaToJSON
+com.kinetica.nifi.processors.GetKineticaToAvro

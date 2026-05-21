@@ -146,32 +146,18 @@ public class PutKineticaFromFile extends AbstractPutKineticaProcessor {
 
         // Parse file-specific configuration
         String delimStr = context.getProperty(PROP_DELIMITER).getValue();
-        delimiter = parseSpecialChar(delimStr);
+        delimiter = KineticaUtilities.parseSpecialChar(delimStr, ',');
 
         String escapeStr = context.getProperty(PROP_ESCAPE_CHAR).getValue();
-        escapeChar = (escapeStr != null && !escapeStr.isEmpty()) ? parseSpecialChar(escapeStr) : '"';
+        escapeChar = (escapeStr != null && !escapeStr.isEmpty())
+                ? KineticaUtilities.parseSpecialChar(escapeStr, '"')
+                : '"';
 
         String quoteStr = context.getProperty(PROP_QUOTE_CHAR).getValue();
         quoteChar = (quoteStr != null && !quoteStr.isEmpty()) ? quoteStr.charAt(0) : null;
 
         hasHeader = context.getProperty(PROP_HAS_HEADER).asBoolean();
         skipErrors = context.getProperty(PROP_SKIP_ERRORS).asBoolean();
-    }
-
-    /**
-     * Parses special character sequences like \t for tab.
-     */
-    private char parseSpecialChar(String str) {
-        if (str == null || str.isEmpty()) {
-            return ',';
-        }
-        if ("\\t".equals(str)) {
-            return '\t';
-        }
-        if ("\\n".equals(str)) {
-            return '\n';
-        }
-        return str.charAt(0);
     }
 
     @Override
@@ -342,7 +328,7 @@ public class PutKineticaFromFile extends AbstractPutKineticaProcessor {
             Column column = type.getColumn(i);
 
             try {
-                setColumnValue(record, column, value);
+                setColumnValueStrict(record, column, value);
             } catch (Exception e) {
                 if (skipErrors) {
                     getLogger().warn("{}: Error in record {}, column '{}': {}",
@@ -358,9 +344,11 @@ public class PutKineticaFromFile extends AbstractPutKineticaProcessor {
     }
 
     /**
-     * Sets a column value on a record with type conversion.
+     * Sets a column value with strict type conversion (throws exceptions on parse errors).
+     *
+     * <p>This is a stricter version than the base class method, used when skipErrors=false.
      */
-    private void setColumnValue(Record record, Column column, String value) throws GPUdbException {
+    private void setColumnValueStrict(Record record, Column column, String value) throws GPUdbException {
         String columnName = column.getName();
 
         // Handle null or empty values

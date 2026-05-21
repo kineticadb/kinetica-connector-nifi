@@ -289,4 +289,152 @@ public final class KineticaUtilities {
             return defaultValue;
         }
     }
+
+    // ========== CHARACTER AND STRING UTILITIES ==========
+
+    /**
+     * Parses special character sequences into their actual characters.
+     *
+     * <p>Supported escape sequences:
+     * <ul>
+     *   <li>\t - tab character</li>
+     *   <li>\n - newline character</li>
+     *   <li>\r - carriage return</li>
+     *   <li>Any single character - used as-is</li>
+     * </ul>
+     *
+     * @param str The string to parse
+     * @param defaultChar The default character if str is null or empty
+     * @return The parsed character
+     */
+    public static char parseSpecialChar(String str, char defaultChar) {
+        if (str == null || str.isEmpty()) {
+            return defaultChar;
+        }
+        switch (str) {
+            case "\\t":
+                return '\t';
+            case "\\n":
+                return '\n';
+            case "\\r":
+                return '\r';
+            case "\\\\":
+                return '\\';
+            default:
+                return str.charAt(0);
+        }
+    }
+
+    /**
+     * Escapes a string for use in JSON output.
+     *
+     * <p>This method handles all JSON special characters according to RFC 8259.
+     *
+     * @param value The string to escape (can be null)
+     * @return The escaped string, or empty string if null
+     */
+    public static String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder(value.length() + 16);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '"':
+                    sb.append("\\\"");
+                    break;
+                case '\\':
+                    sb.append("\\\\");
+                    break;
+                case '\b':
+                    sb.append("\\b");
+                    break;
+                case '\f':
+                    sb.append("\\f");
+                    break;
+                case '\n':
+                    sb.append("\\n");
+                    break;
+                case '\r':
+                    sb.append("\\r");
+                    break;
+                case '\t':
+                    sb.append("\\t");
+                    break;
+                default:
+                    if (c < ' ') {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Escapes a string for use in CSV output.
+     *
+     * <p>If the value contains the delimiter, quote character, or newlines,
+     * it will be quoted and internal quotes will be doubled.
+     *
+     * @param value The string to escape (can be null)
+     * @param delimiter The CSV delimiter character
+     * @param quoteChar The quote character (can be null to disable quoting)
+     * @return The escaped string suitable for CSV output
+     */
+    public static String escapeCsv(String value, char delimiter, Character quoteChar) {
+        if (value == null) {
+            return "";
+        }
+
+        if (quoteChar == null) {
+            return value;
+        }
+
+        boolean needsQuoting = value.indexOf(delimiter) >= 0 ||
+                value.indexOf('\n') >= 0 ||
+                value.indexOf('\r') >= 0 ||
+                value.indexOf(quoteChar) >= 0;
+
+        if (!needsQuoting) {
+            return value;
+        }
+
+        StringBuilder sb = new StringBuilder(value.length() + 16);
+        sb.append(quoteChar);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == quoteChar) {
+                sb.append(quoteChar); // Double the quote character
+            }
+            sb.append(c);
+        }
+        sb.append(quoteChar);
+        return sb.toString();
+    }
+
+    // ========== TYPE MAPPING UTILITIES ==========
+
+    /**
+     * Maps a Kinetica column type to a schema type name.
+     *
+     * @param columnType The Java class of the column type
+     * @return The schema type name (e.g., "double", "float", "int", "long", "string")
+     */
+    public static String mapTypeToSchemaName(Class<?> columnType) {
+        if (columnType == Double.class || columnType == Double.TYPE) {
+            return "double";
+        } else if (columnType == Float.class || columnType == Float.TYPE) {
+            return "float";
+        } else if (columnType == Integer.class || columnType == Integer.TYPE) {
+            return "int";
+        } else if (columnType == Long.class || columnType == Long.TYPE) {
+            return "long";
+        } else {
+            return "string";
+        }
+    }
 }

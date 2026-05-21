@@ -18,6 +18,7 @@ import com.gpudb.GPUdbException;
 import com.gpudb.Record;
 import com.gpudb.Type.Column;
 import com.kinetica.nifi.processors.base.AbstractPutKineticaProcessor;
+// Note: KineticaUtilities methods are now accessed via base class setColumnValue()
 
 /**
  * NiFi processor that bulk loads FlowFile attributes to Kinetica.
@@ -128,75 +129,20 @@ public class PutKinetica extends AbstractPutKineticaProcessor {
      * @return A Record populated with values from attributes, or null on error
      */
     private Record createRecordFromFlowFile(FlowFile flowFile) {
-        if (objectType == null) {
-            getLogger().error("{}: Object type is null, cannot create record", PROCESSOR_NAME);
+        Record record = createEmptyRecord();
+        if (record == null) {
             return null;
         }
 
-        Record record = objectType.newInstance();
         Map<String, String> attributes = flowFile.getAttributes();
 
         for (Column column : objectType.getColumns()) {
-            String columnName = column.getName();
-            String value = attributes.get(columnName);
-
-            try {
-                setColumnValue(record, column, value);
-            } catch (Exception e) {
-                getLogger().error("{}: Error setting value '{}' for column '{}': {}",
-                        PROCESSOR_NAME, value, columnName, e.getMessage());
+            String value = attributes.get(column.getName());
+            if (!setColumnValue(record, column, value)) {
                 return null;
             }
         }
 
         return record;
-    }
-
-    /**
-     * Sets a column value on a record, handling type conversion.
-     *
-     * @param record The record to update
-     * @param column The column metadata
-     * @param value The string value to convert and set
-     */
-    private void setColumnValue(Record record, Column column, String value) {
-        String columnName = column.getName();
-
-        // Handle null or empty values
-        if (value == null || value.trim().isEmpty()) {
-            if (column.isNullable()) {
-                record.put(columnName, null);
-            }
-            // For non-nullable columns, leave as default
-            return;
-        }
-
-        // Check if this is a timestamp column
-        boolean isTimestamp = KineticaUtilities.checkForTimeStamp(column);
-
-        if (isTimestamp) {
-            // Handle timestamp values
-            Long timestamp = KineticaUtilities.parseDateOrTimestamp(value, dateFormat, timeZone, getLogger());
-            if (timestamp != null) {
-                record.put(columnName, timestamp);
-            } else {
-                getLogger().warn("{}: Failed to parse timestamp '{}' for column '{}'",
-                        PROCESSOR_NAME, value, columnName);
-            }
-        } else if (column.getType() == Double.class) {
-            record.put(columnName, KineticaUtilities.parseDoubleSafe(value, 0.0));
-        } else if (column.getType() == Float.class) {
-            record.put(columnName, KineticaUtilities.parseFloatSafe(value, 0.0f));
-        } else if (column.getType() == Integer.class) {
-            record.put(columnName, KineticaUtilities.parseIntSafe(value, 0));
-        } else if (column.getType() == Long.class) {
-            record.put(columnName, KineticaUtilities.parseLongSafe(value, 0L));
-        } else {
-            // String type - trim whitespace
-            String trimmed = KineticaUtilities.trimToNull(value);
-            if (trimmed != null) {
-                record.put(columnName, trimmed);
-            }
-        }
     }
 }

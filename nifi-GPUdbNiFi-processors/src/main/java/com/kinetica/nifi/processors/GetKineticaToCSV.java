@@ -81,20 +81,7 @@ public class GetKineticaToCSV extends AbstractGetKineticaProcessor {
         super.onScheduled(context);
 
         String delimStr = context.getProperty(PROP_DELIMITER).getValue();
-        delimiter = parseDelimiter(delimStr);
-    }
-
-    /**
-     * Parses special delimiter sequences.
-     */
-    private char parseDelimiter(String str) {
-        if (str == null || str.isEmpty()) {
-            return '\t';
-        }
-        if ("\\t".equals(str)) {
-            return '\t';
-        }
-        return str.charAt(0);
+        delimiter = KineticaUtilities.parseSpecialChar(delimStr, '\t');
     }
 
     @Override
@@ -167,20 +154,7 @@ public class GetKineticaToCSV extends AbstractGetKineticaProcessor {
         for (Type.Column column : type.getColumns()) {
             StringBuilder field = new StringBuilder();
             field.append(column.getName()).append("|");
-
-            // Map Java type to schema type
-            Class<?> colType = column.getType();
-            if (colType == Double.class || colType == Double.TYPE) {
-                field.append("double");
-            } else if (colType == Float.class || colType == Float.TYPE) {
-                field.append("float");
-            } else if (colType == Integer.class || colType == Integer.TYPE) {
-                field.append("int");
-            } else if (colType == Long.class || colType == Long.TYPE) {
-                field.append("long");
-            } else {
-                field.append("string");
-            }
+            field.append(KineticaUtilities.mapTypeToSchemaName(column.getType()));
 
             // Add column properties/annotations
             for (String property : column.getProperties()) {
