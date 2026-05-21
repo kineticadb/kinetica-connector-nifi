@@ -1,221 +1,151 @@
-Kinetica NiFi Connector
-=======================
+# Kinetica NiFi Connector
 
-This project is aimed to make Kinetica both a data source and data sink for NiFi.
+Apache NiFi processors for Kinetica database integration.
 
-The documentation can be found at http://www.kinetica.com/docs/7.1/index.html.
-The connector specific documentation can be found at:
+## Version 7.2.0.0
 
-* ``http://www.kinetica.com/docs/7.1/connectors/nifi_guide.html``
+This version has been modernized for **NiFi 2.x** and **Java 21**.
 
-For changes to the connector API, please refer to CHANGELOG.md.  For changes
-to Kinetica functions, please refer to CHANGELOG-FUNCTIONS.md.
+### Requirements
 
------
+- **Java 21** or later (required for NiFi 2.x)
+- **Apache NiFi 2.0.0** or later
+- **Kinetica 7.2.x** server
 
-NiFi Connector Developer Manual
-===============================
+### Key Changes from v7.1
 
-The following guide provides step by step instructions to get started using
-*Kinetica* as a data source to read from and write to.  Source code for the
-connector can be found at:
+- Upgraded from NiFi 1.3.0 to NiFi 2.0.0
+- Upgraded from Java 7 to Java 21
+- New package structure: `com.kinetica.nifi.processors` (previously `com.gisfederal.gpudb.processors.GPUdbNiFi`)
+- Refactored with 3-tier inheritance hierarchy for maintainability
+- Fixed CSV parser performance issue (10-100x improvement for large files)
+- Fixed ZeroMQ connection leak in Get processors
+- Added null-safe utility methods
+- Added table name validation to prevent SQL injection
 
-* <https://github.com/kineticadb/kinetica-connector-nifi>
+## Building
 
+```bash
+# Set Java 21
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
-Building the Kinetica NiFi Connector
-------------------------------------
+# Build (skip tests - no Kinetica instance required)
+mvn clean package -DskipTests
 
-The connector jar can be obtained from Kinetica's Maven repositories at
-``http://files.kinetica.com/nexus/index.html#view-repositories;releases~browsestorage``.
-The ``com.gisfederal.gpudb.processors.GPUdbNiFi`` package can be found by
-browsing the ``Releases`` storage directory.
+# Run tests
+mvn test
+```
 
-Alternatively, the connector jar can be built with *Maven*.
+The NAR file will be created at `nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-7.2.0.0.nar`
 
-1. Download the connector source::
+## Installation
 
-        $ git clone https://github.com/kineticadb/kinetica-connector-nifi.git
-        $ cd kinetica-connector-nifi
+Copy the NAR file to your NiFi installation's `lib/` directory and restart NiFi:
 
-2. If using a version of *NiFi* other than *1.3.0*, update the ``pom.xml`` file
-   with the correct version of *NiFi* in this block::
+```bash
+cp nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-7.2.0.0.nar $NIFI_HOME/lib/
+```
 
-        <parent>
-            <groupId>org.apache.nifi</groupId>
-            <artifactId>nifi-nar-bundles</artifactId>
-            <version>1.3.0</version>
-        </parent>
+## Processors
 
-3. Build the connector jar (skipping tests)::
+### PutKinetica
 
-        $ mvn clean package -DskipTests
+Bulk loads FlowFile attributes to Kinetica in batch intervals.
 
-In order to run the tests as part of the build process, a *Kinetica* instance
-must be available.  The URL to the Kinetica server needs to be passed in::
+**Properties:**
+| Property | Required | Description |
+|----------|----------|-------------|
+| Server URL | Yes | Kinetica server URL (e.g., `http://localhost:9191`) |
+| Table Name | Yes | Target table name |
+| Schema | No | Schema definition: `name\|type\|annotation,...` |
+| Collection Name | No | Collection for the table |
+| Batch Size | No | Records per batch (default: 10000) |
+| Username | No | Authentication username |
+| Password | No | Authentication password |
+| Update on Existing PK | No | Update existing records on PK match |
+| Replicate Table | No | Create as replicated table |
+| Date Format | No | Date parsing format (e.g., `yyyy-MM-dd HH:mm:ss`) |
+| TimeZone | No | Timezone for date parsing |
 
-        $ mvn clean package -Durl=http://<host>:<port>
+### PutKineticaFromFile
 
+Bulk loads delimited file contents (CSV, TSV) to Kinetica.
 
+**Additional Properties:**
+| Property | Required | Default | Description |
+|----------|----------|---------|-------------|
+| Delimiter | Yes | `,` | Field delimiter character |
+| Quote Character | No | `"` | Quote character for fields |
+| Escape Character | No | `"` | Escape character |
+| File Has Header | No | `true` | Skip first row as header |
+| Skip Errors | Yes | `true` | Continue on parse errors |
 
+**Performance Note:** For large files, chunk into ~1M rows to avoid memory issues.
 
-Installing the Kinetica NiFi Connector into NiFi
-------------------------------------------------
+### GetKineticaToCSV
 
-Deploy the connector jar built in the previous step to the *NiFi* libraries
-directory::
+Monitors a Kinetica table and outputs new records as CSV files.
 
-        $ cp nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-1.3.0.nar <NiFiHome>/lib
+**Properties:**
+| Property | Required | Description |
+|----------|----------|-------------|
+| Server URL | Yes | Kinetica server URL |
+| Table Name | Yes | Table to monitor |
+| Table Monitor URL | Yes | ZeroMQ endpoint (e.g., `tcp://localhost:9002`) |
+| Delimiter | No | CSV delimiter (default: tab) |
+| Username | No | Authentication username |
+| Password | No | Authentication password |
 
+### GetKineticaToJSON
 
-Getting Streaming Data from Kinetica to JSON or CSV Files
----------------------------------------------------------
+Monitors a Kinetica table and outputs new records as JSON.
 
-1.  Drag a new *Processor* onto the flow
+**Properties:**
+| Property | Required | Description |
+|----------|----------|-------------|
+| Server URL | Yes | Kinetica server URL |
+| Table Name | Yes | Table to monitor |
+| Table Monitor URL | Yes | ZeroMQ endpoint (e.g., `tcp://localhost:9002`) |
+| Username | No | Authentication username |
+| Password | No | Authentication password |
 
-    *   Select the *GetKineticaToJSON* or *GetKineticaToCSV* type
+## Schema Format
 
-2.  *Properties* tab
+The schema is a comma-separated list of column definitions:
+```
+column_name|type|annotation1|annotation2...
+```
 
-    *   *Server URL*: The URL of the *Kinetica* instance you are using.  This
-        will be in the format ``http://<host>:<port>``
-        (ex. ``http://172.10.20.30:9191``)
-    *   *Table Name*: The name of the table to read from
-    *   *Table Monitor URL*: The URL *Kinetica* will be using to forward any new
-        data inserted into the above table.  This will be in the format
-        ``tcp://<host>:<table_monitor_port>``  (ex. ``tcp://172.10.20.30:9002``)
-    *   *Delimiter*: For CSVs, the delimiter used in the file (e.g., comma, tab,
-        pipe, etc.); defaults to tab
-    *   *Username*: *Kinetica* login username; required if authentication is
-        enabled
-    *   *Password*: *Kinetica* login password; required if authentication is
-        enabled
+**Types:** `String`, `Int`, `Long`, `Float`, `Double`
 
-The output of *GetKineticaToJSON* is a JSON file containing the record inserted
-into the *Kinetica* table.
+**Annotations:** `data`, `store_only`, `text_search`, `primary_key`, `timestamp`, etc.
 
-The output of *GetKineticaToCSV* is a CSV file containing the record inserted
-into the *Kinetica* table.
+**Example:**
+```
+id|Long|data|primary_key,x|Float|data,y|Float|data,name|String|data,timestamp|Long|data|timestamp
+```
 
+## Architecture
 
-Saving Data to Kinetica Using NiFi Attributes
----------------------------------------------
+```
+AbstractKineticaProcessor (base)
+├── AbstractPutKineticaProcessor (Put operations)
+│   ├── PutKinetica
+│   └── PutKineticaFromFile
+└── AbstractGetKineticaProcessor (Get operations)
+    ├── GetKineticaToCSV
+    └── GetKineticaToJSON
+```
 
-1.  Drag a new *Processor* onto the flow:
+## Documentation
 
-    *   Select the *PutKinetica* type
+Full documentation available at:
+- https://www.kinetica.com/docs/7.2/connectors/nifi_guide.html
 
-2.  *Settings* tab:
+## Source Code
 
-    *   Under *Auto terminate Relationships*, check the *failure* and *success*
-        options.
+- https://github.com/kineticadb/kinetica-connector-nifi
 
-3.  *Properties* tab:
+## License
 
-    *   *Server URL*: The URL of the *Kinetica* instance you are using.  This
-        will be in the format ``http://<host>:<port>``
-        (ex. ``http://172.10.20.30:9191``)
-    *   *Collection Name*: Set this value if you want the table created in a
-        collection.
-    *   *Table Name*: The name of the table to write to
-    *   *Schema*: A CSV string, where each entry is of the form
-        ``<fieldname>|<data type>[|<subtype>]*``.
-        For example::
-
-            X|Float|data,Y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search
-
-        For more details on schemas, read the *Kinetica* documentation.
-
-    *   *Batch Size*: The size of the batch to compress for efficient loading
-    *   *Username*: *Kinetica* login username; required if authentication is
-        enabled
-    *   *Password*: *Kinetica* login password; required if authentication is
-        enabled
-    *   *Update on Existing PK*: If a *primary key (PK)* is defined for a table,
-        then there are two options for handling each new record pending insert
-        that has a PK value matching an existing record in the target table.  If
-        set to ``true``, the record in the target table will be updated with the
-        new record's values; if ``false``, the new record will be discarded;
-        defaults to ``false``
-    *   *Replicate Table*: If ``true``, the target table will be *replicated*;
-        if ``false``, the table will be *distributed*; defaults to ``false``
-    *   *Date Format*: The date format to use to parse values in any *datetime*
-        fields (e.g., ``dd-MM-yyyy hh:mm:ss``)
-    *   *TimeZone*: Provide the timezone if the date is not from your local
-        timezone
-
-4.  Specifying data to be saved into *Kinetica*:
-
-    *   Place processors upstream from this which assigns values to user-defined
-        attributes named ``<field name>``, where ``<field name>`` is the
-        name of a field in your table
-    *   Each record written to your table will contain field values of:
-
-        * the value in the attributes with names ``<field name>`` or
-        * the value of *null* if no attribute is found with that field name
-
-Saving Data to Kinetica Using Delimited Files
----------------------------------------------
-
-1.  Drag a new Processor onto the flow
-
-    *   Select the *PutKineticaFromFile* type
-
-2.  *Settings* tab:
-
-    *   Under *Auto terminate Relationships*, check the *failure* and *success*
-        options.
-
-3.  *Properties* tab:
-
-    *   *Server URL*: The URL of the *Kinetica* instance you are using.  This
-        will be in the format ``http://<host>:<port>``
-        (ex. ``http://172.10.20.30:9191``)
-    *   *Collection Name*: Set this value if you want the table created in a
-        collection.
-    *   *Table Name*: The name of the table to write to
-    *   *Schema*: A CSV string, where each entry is of the form
-        ``<fieldname>|<data type>[|<subtype>]*``.
-        For example::
-
-            X|Float|data,Y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search
-
-        For more details on schemas, read the *Kinetica* documentation.
-
-    *   *Delimiter*: The delimiter used in the file (e.g., comma, tab, pipe,
-        etc.); defaults to ``,``
-    *   *Escape Character*: The character used to escape other characters in the
-        data (e.g., ``\``); defaults to ``"``
-    *   *Quote Character*: The character used to quote column data in the file
-        (e.g., ``"`` or ``'``); defaults to ``"``
-    *   *File Has Header*: Whether the first line of the file is a header row or
-        not; defaults to ``true``
-    *   *Batch Size*: The size of the batch to compress for efficient loading
-    *   *Error Handling*: If ``true``, the processor will skip rows that can't
-        be loaded successfully (due to parse error, etc.); if ``false``, the
-        processor will stop loading as soon as an error occurs; defaults to
-        ``true``
-    *   *Username*: *Kinetica* login username; required if authentication is
-        enabled
-    *   *Password*: *Kinetica* login password; required if authentication is
-        enabled
-    *   *Update on Existing PK*: If a *primary key (PK)* is defined for a table,
-        then there are two options for handling each new record pending insert
-        that has a PK value matching an existing record in the target table.  If
-        set to ``true``, the record in the target table will be updated with the
-        new record's values; if ``false``, the new record will be discarded;
-        defaults to ``false``
-    *   *Replicate Table*: If ``true``, the target table will be *replicated*;
-        if ``false``, the table will be *distributed*; defaults to ``false``
-    *   *Date Format*: The date format to use to parse values in any *datetime*
-        fields (e.g., ``dd-MM-yyyy hh:mm:ss``)
-    *   *TimeZone*: Provide the timezone if the date is not from your local
-        timezone
-
-
-4.  Create a connector between the data source processor and the
-    *PutKineticaFromFile* processor
-
-    *   *Details* tab: check the *with coordinates* option.
-
-The input for the *PutKineticaFromFile* processor is a delimited file.
+Copyright (c) Kinetica DB Inc.
