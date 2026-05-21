@@ -1,0 +1,6 @@
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/test/java/com/kinetica/nifi/processors/AbstractKineticaProcessorTest.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/test/java/com/kinetica/nifi/processors/PutKineticaTest.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/test/java/com/kinetica/nifi/processors/GetKineticaToJSONTest.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/test/java/com/kinetica/nifi/processors/PutKineticaFromFileTest.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/test/java/com/kinetica/nifi/processors/GetKineticaToCSVTest.java
+/home/anindyam/kinetica/gpudb-dev-master/public-gpudb-connector-nifi/nifi-GPUdbNiFi-processors/src/test/java/com/kinetica/nifi/processors/KineticaUtilitiesTest.java

@@ -1,0 +1,7 @@
+com/kinetica/nifi/processors/GetKineticaToCSVTest.class
+com/kinetica/nifi/processors/PutKineticaTest.class
+com/kinetica/nifi/processors/KineticaUtilitiesTest.class
+com/kinetica/nifi/processors/AbstractKineticaProcessorTest.class
+com/kinetica/nifi/processors/AbstractKineticaProcessorTest$TestableKineticaProcessor.class
+com/kinetica/nifi/processors/PutKineticaFromFileTest.class
+com/kinetica/nifi/processors/GetKineticaToJSONTest.class
