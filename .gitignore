@@ -1,0 +1,193 @@
+# =============================================================================
+# Kinetica NiFi Connector - Git Ignore
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Maven
+# -----------------------------------------------------------------------------
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# -----------------------------------------------------------------------------
+# IDE - IntelliJ IDEA
+# -----------------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.idea_modules/
+
+# -----------------------------------------------------------------------------
+# IDE - Eclipse
+# -----------------------------------------------------------------------------
+.project
+.classpath
+.settings/
+.metadata/
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+.loadpath
+.recommenders/
+.externalToolBuilders/
+*.launch
+.factorypath
+
+# -----------------------------------------------------------------------------
+# IDE - VS Code
+# -----------------------------------------------------------------------------
+.vscode/
+*.code-workspace
+
+# -----------------------------------------------------------------------------
+# IDE - NetBeans
+# -----------------------------------------------------------------------------
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# -----------------------------------------------------------------------------
+# Java
+# -----------------------------------------------------------------------------
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+
+# -----------------------------------------------------------------------------
+# NiFi Specific
+# -----------------------------------------------------------------------------
+# NAR files (build artifacts)
+*.nar
+
+# NiFi flow files and state
+flow.xml.gz
+flow.json.gz
+nifi-app.log
+nifi-bootstrap.log
+nifi-user.log
+
+# NiFi work directories
+work/
+flowfile_repository/
+content_repository/
+database_repository/
+provenance_repository/
+
+# -----------------------------------------------------------------------------
+# Build Quality Tools
+# -----------------------------------------------------------------------------
+# SpotBugs
+spotbugsXml.xml
+
+# PMD
+pmd.xml
+cpd.xml
+
+# JaCoCo
+jacoco.exec
+jacoco-ut.exec
+jacoco-it.exec
+
+# OWASP Dependency Check
+dependency-check-report.*
+dc.db
+dc.lock
+
+# Checkstyle
+checkstyle-result.xml
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
+*.log
+logs/
+
+# -----------------------------------------------------------------------------
+# OS Generated
+# -----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# -----------------------------------------------------------------------------
+# Test and Coverage Reports
+# -----------------------------------------------------------------------------
+surefire-reports/
+failsafe-reports/
+site/
+coverage/
+test-output/
+
+# -----------------------------------------------------------------------------
+# Environment and Secrets
+# -----------------------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+credentials.json
+secrets.json
+
+# Do NOT ignore the suppressions file (needed for builds)
+!dependency-check-suppressions.xml
+!spotbugs-exclude.xml
+
+# -----------------------------------------------------------------------------
+# Claude Code / AI Assistants
+# -----------------------------------------------------------------------------
+# Keep CLAUDE.md for context, but ignore conversation logs
+.claude/
+!CLAUDE.md
+
+# -----------------------------------------------------------------------------
+# Miscellaneous
+# -----------------------------------------------------------------------------
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Local configuration overrides
+local.properties
+*.local.xml

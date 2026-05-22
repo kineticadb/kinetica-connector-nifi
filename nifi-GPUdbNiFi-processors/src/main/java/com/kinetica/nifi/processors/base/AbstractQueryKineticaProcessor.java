@@ -2,9 +2,13 @@ package com.kinetica.nifi.processors.base;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
@@ -16,6 +20,7 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 
 import com.gpudb.GPUdbException;
+import com.gpudb.GPUdbSqlIterator;
 import com.gpudb.Record;
 import com.gpudb.Type;
 import com.gpudb.protocol.ExecuteSqlResponse;
@@ -71,6 +76,31 @@ public abstract class AbstractQueryKineticaProcessor extends AbstractKineticaPro
             .addValidator(StandardValidators.INTEGER_VALIDATOR)
             .build();
 
+    public static final PropertyDescriptor PROP_USE_STREAMING = new PropertyDescriptor.Builder()
+            .name("Use Streaming Mode")
+            .displayName("Use Streaming Mode")
+            .description("If true, uses Kinetica's GPUdbSqlIterator with server-side paging tables " +
+                    "for memory-efficient streaming of large result sets. " +
+                    "This avoids re-executing the query for each page and automatically cleans up " +
+                    "temporary tables. Recommended for queries returning more than 100K records.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor PROP_PAGING_TABLE_TTL = new PropertyDescriptor.Builder()
+            .name("Paging Table TTL")
+            .displayName("Paging Table TTL (seconds)")
+            .description("Time-to-live in seconds for server-side paging tables when streaming mode is enabled. " +
+                    "The paging table will be automatically deleted after this duration if not cleaned up normally. " +
+                    "Set higher values for long-running queries.")
+            .required(false)
+            .defaultValue("300")
+            .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
+            .dependsOn(PROP_USE_STREAMING, "true")
+            .build();
+
     // ========== RELATIONSHIPS ==========
 
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
@@ -107,6 +137,8 @@ public abstract class AbstractQueryKineticaProcessor extends AbstractKineticaPro
     protected volatile String sqlQuery;
     protected volatile int pageSize;
     protected volatile int maxRecords;
+    protected volatile boolean useStreaming;
+    protected volatile int pagingTableTtl;
 
     private List<PropertyDescriptor> descriptors;
     private Set<Relationship> relationships;
@@ -121,6 +153,8 @@ public abstract class AbstractQueryKineticaProcessor extends AbstractKineticaPro
         props.add(PROP_SQL_QUERY);
         props.add(PROP_PAGE_SIZE);
         props.add(PROP_MAX_RECORDS);
+        props.add(PROP_USE_STREAMING);
+        props.add(PROP_PAGING_TABLE_TTL);
         // Allow subclasses to add more properties
         props.addAll(getAdditionalPropertyDescriptors());
         this.descriptors = Collections.unmodifiableList(props);
@@ -159,9 +193,11 @@ public abstract class AbstractQueryKineticaProcessor extends AbstractKineticaPro
         // Read Query-specific configuration
         pageSize = context.getProperty(PROP_PAGE_SIZE).evaluateAttributeExpressions().asInteger();
         maxRecords = context.getProperty(PROP_MAX_RECORDS).asInteger();
+        useStreaming = context.getProperty(PROP_USE_STREAMING).asBoolean();
+        pagingTableTtl = context.getProperty(PROP_PAGING_TABLE_TTL).asInteger();
 
-        getLogger().info("Query processor configured: pageSize={}, maxRecords={}",
-                pageSize, maxRecords);
+        getLogger().info("Query processor configured: pageSize={}, maxRecords={}, streaming={}, pagingTTL={}",
+                pageSize, maxRecords, useStreaming, pagingTableTtl);
     }
 
     // ========== SQL VALIDATION ==========
@@ -285,5 +321,131 @@ public abstract class AbstractQueryKineticaProcessor extends AbstractKineticaPro
             return "";
         }
         return value.toString();
+    }
+
+    // ========== STREAMING EXECUTION ==========
+
+    /**
+     * Creates a streaming iterator for executing a SQL query.
+     *
+     * <p>This method uses Kinetica's GPUdbSqlIterator which:
+     * <ul>
+     *   <li>Creates server-side paging tables to store query results</li>
+     *   <li>Fetches records in configurable batches (page size)</li>
+     *   <li>Automatically cleans up paging tables when closed</li>
+     *   <li>Avoids re-executing the query for each page</li>
+     * </ul>
+     *
+     * <p><strong>IMPORTANT:</strong> The returned iterator MUST be closed after use
+     * to clean up server-side paging tables. Use try-with-resources pattern.
+     *
+     * @param query The SQL query to execute
+     * @return StreamingQueryResult containing iterator and metadata
+     * @throws GPUdbException if query execution fails
+     */
+    protected StreamingQueryResult createStreamingQuery(String query) throws GPUdbException {
+        Map<String, String> sqlOptions = new HashMap<>();
+
+        // Set paging table TTL for automatic cleanup if not closed properly
+        sqlOptions.put("paging_table_ttl", String.valueOf(pagingTableTtl));
+
+        GPUdbSqlIterator<Record> iterator = new GPUdbSqlIterator<>(
+                gpudb,
+                query,
+                pageSize,
+                sqlOptions
+        );
+
+        return new StreamingQueryResult(iterator);
+    }
+
+    /**
+     * Executes a streaming query and processes each record with a consumer.
+     *
+     * <p>This is the recommended method for processing large result sets as it:
+     * <ul>
+     *   <li>Automatically manages the iterator lifecycle</li>
+     *   <li>Ensures proper cleanup of server-side paging tables</li>
+     *   <li>Respects the maxRecords limit</li>
+     *   <li>Provides record count tracking</li>
+     * </ul>
+     *
+     * @param query The SQL query to execute
+     * @param recordProcessor Consumer function to process each record
+     * @return Total number of records processed
+     * @throws GPUdbException if query execution fails
+     */
+    protected long executeStreamingQuery(String query, Consumer<Record> recordProcessor)
+            throws GPUdbException {
+
+        long recordCount = 0;
+
+        try (StreamingQueryResult result = createStreamingQuery(query)) {
+            for (Record record : result) {
+                // Check max records limit
+                if (maxRecords > 0 && recordCount >= maxRecords) {
+                    break;
+                }
+
+                recordProcessor.accept(record);
+                recordCount++;
+            }
+
+            getLogger().debug("Streaming query processed {} records (total available: {})",
+                    recordCount, result.getTotalCount());
+
+        } catch (Exception e) {
+            if (e instanceof GPUdbException) {
+                throw (GPUdbException) e;
+            }
+            throw new GPUdbException("Error during streaming query: " + e.getMessage(), e);
+        }
+
+        return recordCount;
+    }
+
+    /**
+     * Result wrapper for streaming SQL queries.
+     *
+     * <p>This class wraps GPUdbSqlIterator and provides:
+     * <ul>
+     *   <li>AutoCloseable for try-with-resources pattern</li>
+     *   <li>Iterable for enhanced for-loop support</li>
+     *   <li>Access to total record count</li>
+     * </ul>
+     *
+     * <p><strong>Usage example:</strong>
+     * <pre>
+     * try (StreamingQueryResult result = createStreamingQuery(query)) {
+     *     for (Record record : result) {
+     *         // Process record
+     *     }
+     * }
+     * </pre>
+     */
+    protected static class StreamingQueryResult implements Iterable<Record>, AutoCloseable {
+        private final GPUdbSqlIterator<Record> iterator;
+
+        public StreamingQueryResult(GPUdbSqlIterator<Record> iterator) {
+            this.iterator = iterator;
+        }
+
+        /**
+         * Returns the total number of records matching the query.
+         * This is available after the first batch is fetched.
+         */
+        public long getTotalCount() {
+            return iterator.size();
+        }
+
+        @Override
+        public Iterator<Record> iterator() {
+            return iterator.iterator();
+        }
+
+        @Override
+        public void close() throws Exception {
+            iterator.close();
+        }
     }
 }

@@ -41,8 +41,18 @@ import com.kinetica.nifi.processors.base.AbstractQueryKineticaProcessor;
  *   <li>Streaming JSON output for large result sets</li>
  *   <li>Configurable output format (array or NDJSON)</li>
  *   <li>Pretty printing option</li>
- *   <li>Pagination for memory efficiency</li>
+ *   <li>Two execution modes:
+ *       <ul>
+ *         <li><b>Traditional pagination</b>: Re-executes query for each page (default)</li>
+ *         <li><b>Streaming mode</b>: Uses server-side paging tables for efficiency with large results</li>
+ *       </ul>
+ *   </li>
  * </ul>
+ *
+ * <p><strong>Streaming Mode (recommended for large queries):</strong>
+ * When enabled, uses Kinetica's GPUdbSqlIterator which creates server-side paging tables.
+ * This avoids re-executing the query for each batch and provides better performance
+ * for queries returning more than 100K records.
  *
  * @author Kinetica Engineering
  * @version 7.2.0.0
@@ -51,6 +61,8 @@ import com.kinetica.nifi.processors.base.AbstractQueryKineticaProcessor;
 @Tags({"Kinetica", "query", "select", "json", "export"})
 @CapabilityDescription("Executes SQL SELECT queries on Kinetica and outputs results as JSON. " +
         "Results are streamed to avoid memory issues with large result sets. " +
+        "Enable 'Use Streaming Mode' for queries returning more than 100K records - " +
+        "this uses server-side paging tables for better performance. " +
         "Only SELECT queries are allowed for security.")
 @WritesAttributes({
         @WritesAttribute(attribute = "record.count", description = "Number of records in the output"),
@@ -180,8 +192,88 @@ public class QueryKineticaToJSON extends AbstractQueryKineticaProcessor {
 
     /**
      * Executes query and writes results to JSON.
+     * Automatically chooses between streaming and traditional pagination based on configuration.
      */
     private long executeQueryToJSON(String query, OutputStream out) throws IOException, GPUdbException {
+        if (useStreaming) {
+            return executeQueryToJSONStreaming(query, out);
+        } else {
+            return executeQueryToJSONPaginated(query, out);
+        }
+    }
+
+    /**
+     * Executes query using streaming mode with server-side paging tables.
+     * This is more efficient for large result sets as it avoids re-executing the query.
+     */
+    private long executeQueryToJSONStreaming(String query, OutputStream out) throws IOException, GPUdbException {
+        long recordCount = 0;
+        List<String> columnNames = null;
+
+        getLogger().debug("{}: Using streaming mode with server-side paging tables", PROCESSOR_NAME);
+
+        try (StreamingQueryResult result = createStreamingQuery(query)) {
+            if (isNdjson) {
+                // NDJSON format - one object per line
+                try (Writer writer = new OutputStreamWriter(out, StandardCharsets.UTF_8)) {
+                    for (Record record : result) {
+                        if (maxRecords > 0 && recordCount >= maxRecords) break;
+
+                        // Get column names from first record
+                        if (columnNames == null) {
+                            columnNames = getColumnNames(record.getType());
+                        }
+
+                        writeNdjsonRecord(writer, columnNames, record);
+                        recordCount++;
+                    }
+                }
+            } else {
+                // JSON array format
+                try (JsonGenerator generator = jsonFactory.createGenerator(out)) {
+                    if (prettyPrint) {
+                        generator.useDefaultPrettyPrinter();
+                    }
+
+                    generator.writeStartArray();
+
+                    for (Record record : result) {
+                        if (maxRecords > 0 && recordCount >= maxRecords) break;
+
+                        // Get column names from first record
+                        if (columnNames == null) {
+                            columnNames = getColumnNames(record.getType());
+                        }
+
+                        writeJsonRecord(generator, columnNames, record);
+                        recordCount++;
+                    }
+
+                    generator.writeEndArray();
+                }
+            }
+
+            getLogger().info("{}: Streaming query completed. Processed {} of {} total records",
+                    PROCESSOR_NAME, recordCount, result.getTotalCount());
+
+        } catch (Exception e) {
+            if (e instanceof IOException) {
+                throw (IOException) e;
+            }
+            if (e instanceof GPUdbException) {
+                throw (GPUdbException) e;
+            }
+            throw new GPUdbException("Streaming query failed: " + e.getMessage(), e);
+        }
+
+        return recordCount;
+    }
+
+    /**
+     * Executes query using traditional pagination (re-executes query for each page).
+     * This is the default mode for backward compatibility.
+     */
+    private long executeQueryToJSONPaginated(String query, OutputStream out) throws IOException, GPUdbException {
         long recordCount = 0;
         long offset = 0;
         List<String> columnNames = null;

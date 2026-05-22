@@ -39,8 +39,18 @@ import com.kinetica.nifi.processors.base.AbstractQueryKineticaProcessor;
  *   <li>Streaming output for large result sets</li>
  *   <li>Configurable delimiter and quoting</li>
  *   <li>Optional header row</li>
- *   <li>Pagination for memory efficiency</li>
+ *   <li>Two execution modes:
+ *       <ul>
+ *         <li><b>Traditional pagination</b>: Re-executes query for each page (default)</li>
+ *         <li><b>Streaming mode</b>: Uses server-side paging tables for efficiency with large results</li>
+ *       </ul>
+ *   </li>
  * </ul>
+ *
+ * <p><strong>Streaming Mode (recommended for large queries):</strong>
+ * When enabled, uses Kinetica's GPUdbSqlIterator which creates server-side paging tables.
+ * This avoids re-executing the query for each batch and provides better performance
+ * for queries returning more than 100K records.
  *
  * @author Kinetica Engineering
  * @version 7.2.0.0
@@ -49,6 +59,8 @@ import com.kinetica.nifi.processors.base.AbstractQueryKineticaProcessor;
 @Tags({"Kinetica", "query", "select", "csv", "export"})
 @CapabilityDescription("Executes SQL SELECT queries on Kinetica and outputs results as CSV. " +
         "Results are streamed to avoid memory issues with large result sets. " +
+        "Enable 'Use Streaming Mode' for queries returning more than 100K records - " +
+        "this uses server-side paging tables for better performance. " +
         "Only SELECT queries are allowed for security.")
 @WritesAttributes({
         @WritesAttribute(attribute = "record.count", description = "Number of records in the output"),
@@ -188,8 +200,81 @@ public class QueryKineticaToCSV extends AbstractQueryKineticaProcessor {
 
     /**
      * Executes query and writes results to CSV.
+     * Automatically chooses between streaming and traditional pagination based on configuration.
      */
     private long executeQueryToCSV(String query, Writer writer) throws IOException, GPUdbException {
+        if (useStreaming) {
+            return executeQueryToCSVStreaming(query, writer);
+        } else {
+            return executeQueryToCSVPaginated(query, writer);
+        }
+    }
+
+    /**
+     * Executes query using streaming mode with server-side paging tables.
+     * This is more efficient for large result sets as it avoids re-executing the query.
+     */
+    private long executeQueryToCSVStreaming(String query, Writer writer) throws IOException, GPUdbException {
+        long recordCount = 0;
+        boolean headerWritten = false;
+        List<String> columnNames = null;
+
+        getLogger().debug("{}: Using streaming mode with server-side paging tables", PROCESSOR_NAME);
+
+        try (StreamingQueryResult result = createStreamingQuery(query)) {
+            for (Record record : result) {
+                // Check max records limit
+                if (maxRecords > 0 && recordCount >= maxRecords) {
+                    getLogger().debug("{}: Reached max records limit: {}", PROCESSOR_NAME, maxRecords);
+                    break;
+                }
+
+                // Get column names from first record
+                if (columnNames == null) {
+                    Type recordType = record.getType();
+                    columnNames = new ArrayList<>();
+                    for (Column col : recordType.getColumns()) {
+                        columnNames.add(col.getName());
+                    }
+
+                    // Write header if needed
+                    if (includeHeader) {
+                        writeCSVRow(writer, columnNames);
+                        headerWritten = true;
+                    }
+                }
+
+                // Write data row
+                List<String> values = new ArrayList<>();
+                for (String colName : columnNames) {
+                    Object value = record.get(colName);
+                    values.add(formatValue(value));
+                }
+                writeCSVRow(writer, values);
+                recordCount++;
+            }
+
+            getLogger().info("{}: Streaming query completed. Processed {} of {} total records",
+                    PROCESSOR_NAME, recordCount, result.getTotalCount());
+
+        } catch (Exception e) {
+            if (e instanceof IOException) {
+                throw (IOException) e;
+            }
+            if (e instanceof GPUdbException) {
+                throw (GPUdbException) e;
+            }
+            throw new GPUdbException("Streaming query failed: " + e.getMessage(), e);
+        }
+
+        return recordCount;
+    }
+
+    /**
+     * Executes query using traditional pagination (re-executes query for each page).
+     * This is the default mode for backward compatibility.
+     */
+    private long executeQueryToCSVPaginated(String query, Writer writer) throws IOException, GPUdbException {
         long recordCount = 0;
         long offset = 0;
         boolean headerWritten = false;

@@ -31,11 +31,13 @@
         <pmd.version>3.21.2</pmd.version>
         <spotbugs.version>4.8.3.1</spotbugs.version>
         <jacoco.version>0.8.11</jacoco.version>
+        <dependency-check.version>9.0.9</dependency-check.version>
     </properties>
 
     <modules>
         <module>nifi-GPUdbNiFi-processors</module>
         <module>nifi-GPUdbNiFi-nar</module>
+        <module>integration-tests</module>
     </modules>
 
     <distributionManagement>
@@ -262,6 +264,28 @@
                         </execution>
                     </executions>
                 </plugin>
+
+                <!-- OWASP Dependency Check - Vulnerability scanning -->
+                <plugin>
+                    <groupId>org.owasp</groupId>
+                    <artifactId>dependency-check-maven</artifactId>
+                    <version>${dependency-check.version}</version>
+                    <configuration>
+                        <!-- Fail build on CVSS score >= 7 (HIGH severity) -->
+                        <failBuildOnCVSS>7</failBuildOnCVSS>
+                        <!-- Output formats -->
+                        <formats>
+                            <format>HTML</format>
+                            <format>JSON</format>
+                        </formats>
+                        <!-- Suppress false positives file (optional) -->
+                        <suppressionFile>${project.basedir}/dependency-check-suppressions.xml</suppressionFile>
+                        <!-- Skip dev dependencies -->
+                        <skipTestScope>true</skipTestScope>
+                        <!-- Use NVD API (recommended for 9.x) -->
+                        <nvdApiKeyEnvironmentVariable>NVD_API_KEY</nvdApiKeyEnvironmentVariable>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
 
@@ -303,6 +327,20 @@
                     </reportSet>
                 </reportSets>
             </plugin>
+
+            <!-- OWASP Dependency Check reporting -->
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>${dependency-check.version}</version>
+                <reportSets>
+                    <reportSet>
+                        <reports>
+                            <report>aggregate</report>
+                        </reports>
+                    </reportSet>
+                </reportSets>
+            </plugin>
         </plugins>
     </reporting>
 
@@ -335,6 +373,28 @@
                                 <phase>verify</phase>
                                 <goals>
                                     <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Profile for security vulnerability scanning -->
+        <profile>
+            <id>security</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.owasp</groupId>
+                        <artifactId>dependency-check-maven</artifactId>
+                        <executions>
+                            <execution>
+                                <id>dependency-check</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>aggregate</goal>
                                 </goals>
                             </execution>
                         </executions>

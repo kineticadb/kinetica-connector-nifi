@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.gpudb</groupId>
+        <artifactId>GPUdbNiFiConnector</artifactId>
+        <version>7.2.0.0</version>
+    </parent>
+
+    <artifactId>nifi-GPUdbNiFi-integration-tests</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Kinetica NiFi Connector - Integration Tests</name>
+    <description>Integration tests for Kinetica NiFi processors requiring a running Kinetica instance</description>
+
+    <properties>
+        <!-- Kinetica connection defaults (override via -D or environment variables) -->
+        <kinetica.url>http://localhost:9191</kinetica.url>
+        <kinetica.username></kinetica.username>
+        <kinetica.password></kinetica.password>
+
+        <!-- Test configuration -->
+        <skipITs>false</skipITs>
+        <it.test.table.prefix>nifi_it_</it.test.table.prefix>
+    </properties>
+
+    <dependencies>
+        <!-- Module under test -->
+        <dependency>
+            <groupId>com.gpudb</groupId>
+            <artifactId>nifi-GPUdbNiFi-processors</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Kinetica API -->
+        <dependency>
+            <groupId>com.gpudb</groupId>
+            <artifactId>gpudb-api</artifactId>
+        </dependency>
+
+        <!-- NiFi testing framework -->
+        <dependency>
+            <groupId>org.apache.nifi</groupId>
+            <artifactId>nifi-mock</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JUnit 5 for integration tests -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.1</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- AssertJ for fluent assertions -->
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.24.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Awaitility for async testing -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Jackson for JSON test data -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Commons CSV for test data -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+        </dependency>
+
+        <!-- Logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Surefire - skip unit tests in this module (we only have ITs) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+
+            <!-- Failsafe - for integration tests -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.2.2</version>
+                <configuration>
+                    <skipITs>${skipITs}</skipITs>
+                    <includes>
+                        <include>**/*IT.java</include>
+                        <include>**/*IntegrationTest.java</include>
+                    </includes>
+                    <systemPropertyVariables>
+                        <kinetica.url>${kinetica.url}</kinetica.url>
+                        <kinetica.username>${kinetica.username}</kinetica.username>
+                        <kinetica.password>${kinetica.password}</kinetica.password>
+                        <it.test.table.prefix>${it.test.table.prefix}</it.test.table.prefix>
+                    </systemPropertyVariables>
+                    <!-- Parallel execution -->
+                    <parallel>classes</parallel>
+                    <threadCount>4</threadCount>
+                    <perCoreThreadCount>true</perCoreThreadCount>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+
+        <!-- Filter test resources to substitute properties -->
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+                <filtering>true</filtering>
+            </testResource>
+        </testResources>
+    </build>
+
+    <profiles>
+        <!-- Profile to skip integration tests (default for CI without Kinetica) -->
+        <profile>
+            <id>skip-its</id>
+            <properties>
+                <skipITs>true</skipITs>
+            </properties>
+        </profile>
+
+        <!-- Profile for running against a specific Kinetica instance -->
+        <profile>
+            <id>kinetica-dev</id>
+            <properties>
+                <kinetica.url>http://kinetica-dev:9191</kinetica.url>
+            </properties>
+        </profile>
+
+        <!-- Profile for running with SSL -->
+        <profile>
+            <id>kinetica-ssl</id>
+            <properties>
+                <kinetica.url>https://localhost:8082/gpudb-0</kinetica.url>
+            </properties>
+        </profile>
+    </profiles>
+</project>
