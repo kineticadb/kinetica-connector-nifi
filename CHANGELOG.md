@@ -1,5 +1,40 @@
 # GPUdb NiFi Connector Changelog
 
+## Version 7.2
+
+### Version 7.2.0.0 - 2026-05-31
+
+#### Added
+-   New processors:
+    -   `ExecuteKineticaSQL`
+    -   `ListKineticaTables`
+    -   `PutKineticaFromAvro`
+    -   `PutKineticaFromJSON`
+    -   `PutKineticaRecord`
+    -   `QueryKineticaToAvro`
+    -   `QueryKineticaToCSV`
+    -   `QueryKineticaToJSON`
+-   SSL/TLS support for secure connections
+-   Connection pooling for improved performance
+-   Configurable timeouts for connection and socket operations
+-   Expression Language support for dynamic configuration
+
+#### Changed
+-   Upgraded from NiFi 1.3.0 to NiFi 2.0.0
+-   Upgraded from Java 7 to Java 21
+-   Refactored package structure from
+    `com.gisfederal.gpudb.processors.GPUdbNiFi` to
+    `com.kinetica.nifi.processors`
+-   Moved to 3-tier processor inheritance hierarchy for maintainability
+-   Update README with comprehensive documentation
+
+#### Fixed
+-   CSV parser performance issue (10-100x improvement)
+-   ZeroMQ connection leak in Get processors
+-   Table name validation to prevent SQL injection
+-   Null-safe utility methods
+
+
 ## Version 7.1
 
 ### Version 7.1.0.0 - 2020-07-27

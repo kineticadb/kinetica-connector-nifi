@@ -12,7 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-com.gisfederal.gpudb.processors.GPUdbNiFi.GetKineticaToCSV
-com.gisfederal.gpudb.processors.GPUdbNiFi.GetKineticaToJSON
-com.gisfederal.gpudb.processors.GPUdbNiFi.PutKinetica
-com.gisfederal.gpudb.processors.GPUdbNiFi.PutKineticaFromFile
+
+# Kinetica NiFi Processors (v7.2.0.0 - NiFi 2.x compatible)
+# Put processors - write data to Kinetica
+com.kinetica.nifi.processors.PutKinetica
+com.kinetica.nifi.processors.PutKineticaFromFile
+com.kinetica.nifi.processors.PutKineticaFromJSON
+com.kinetica.nifi.processors.PutKineticaFromAvro
+com.kinetica.nifi.processors.PutKineticaRecord
+# Query processors - read data via SQL queries
+com.kinetica.nifi.processors.QueryKineticaToCSV
+com.kinetica.nifi.processors.QueryKineticaToJSON
+com.kinetica.nifi.processors.QueryKineticaToAvro
+# Execute SQL processors - run arbitrary SQL statements
+com.kinetica.nifi.processors.ExecuteKineticaSQL
+# List processors - discover and enumerate tables
+com.kinetica.nifi.processors.ListKineticaTables
+# Get processors - stream data from table monitors
+com.kinetica.nifi.processors.GetKineticaToCSV
+com.kinetica.nifi.processors.GetKineticaToJSON
+com.kinetica.nifi.processors.GetKineticaToAvro

@@ -1,19 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>com.gpudb</groupId>
         <artifactId>GPUdbNiFiConnector</artifactId>
-        <version>7.1.0.0</version>
+        <version>7.2.0.0</version>
     </parent>
+
     <artifactId>nifi-GPUdbNiFi-nar</artifactId>
-    <version>7.1.0.0</version>
     <packaging>nar</packaging>
+
+    <name>Kinetica NiFi NAR</name>
+    <description>NiFi Archive (NAR) for Kinetica processors</description>
+
     <dependencies>
         <dependency>
             <groupId>com.gpudb</groupId>
             <artifactId>nifi-GPUdbNiFi-processors</artifactId>
-            <version>[7.1.0.0,7.2.0.0-SNAPSHOT)</version>
+            <version>${project.version}</version>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.nifi</groupId>
+                <artifactId>nifi-nar-maven-plugin</artifactId>
+                <extensions>true</extensions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

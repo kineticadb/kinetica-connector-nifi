@@ -1,105 +1,83 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>com.gpudb</groupId>
         <artifactId>GPUdbNiFiConnector</artifactId>
-        <version>7.1.0.0</version>
+        <version>7.2.0.0</version>
     </parent>
+
     <artifactId>nifi-GPUdbNiFi-processors</artifactId>
     <packaging>jar</packaging>
-    <properties>
-    	<kinetica.version>[7.1.0.0,7.2.0.0-SNAPSHOT)</kinetica.version>
-    	<nifi.version>1.3.0</nifi.version>
-    </properties>
-    <build>
-        <pluginManagement>    
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-shade-plugin</artifactId>
-                    <version>2.4.3</version>
-                    <executions>
-                        <execution>
-                            <phase>package</phase>
-                            <goals>
-                                <goal>shade</goal>
-                            </goals>
-                            <configuration>
-                                <shadedArtifactAttached>true</shadedArtifactAttached>
-                                <shadedClassifierName>shaded</shadedClassifierName>
-                                <relocations>
-                                    <relocation>
-                                        <pattern>org.apache.avro</pattern>
-                                        <shadedPattern>org.shaded.apache.avro</shadedPattern>
-                                    </relocation>
-                                    <relocation>
-                                        <pattern>org.apache.commons.io</pattern>
-                                        <shadedPattern>org.shaded.apache.commons.io</shadedPattern>
-                                    </relocation>                                  
-                                </relocations>
-                            </configuration>
-                        </execution>
-                    </executions>
-                </plugin>            
-                
-                <plugin>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.2</version>
-                    <configuration>
-                        <source>1.7</source>
-                        <target>1.7</target>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <configuration>
-                        <argLine>-Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
-                        <redirectTestOutputToFile>true</redirectTestOutputToFile>
-                    </configuration>
-                </plugin>
-            </plugins>
-        </pluginManagement>
-    </build>
-    <repositories>
-        <repository>
-            <id>gpudb-releases</id>
-            <name>GPUdb Release Nexus</name>
-            <url>http://files.kinetica.com/nexus/content/repositories/releases/</url>
-        </repository>
-        <repository>
-            <id>gpudb-snapshots</id>
-            <name>GPUdb Snapshot Nexus</name>
-            <url>http://files.kinetica.com/nexus/content/repositories/snapshots/</url>
-        </repository>
-    </repositories>
+
+    <name>Kinetica NiFi Processors</name>
+    <description>NiFi processors for Kinetica database operations</description>
 
     <dependencies>
+        <!-- Kinetica API -->
         <dependency>
             <groupId>com.gpudb</groupId>
             <artifactId>gpudb-api</artifactId>
-            <version>${kinetica.version}</version>
         </dependency>
+
+        <!-- NiFi Core -->
         <dependency>
             <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-api</artifactId>
-            <version>${nifi.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.nifi</groupId>
-            <artifactId>nifi-processor-utils</artifactId>
-            <version>${nifi.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-utils</artifactId>
-            <version>${nifi.version}</version>
+        </dependency>
+        <!-- NiFi Record API -->
+        <dependency>
+            <groupId>org.apache.nifi</groupId>
+            <artifactId>nifi-record-serialization-service-api</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.nifi</groupId>
+            <artifactId>nifi-record</artifactId>
+        </dependency>
+
+        <!-- Apache Commons CSV -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+        </dependency>
+
+        <!-- Apache Avro -->
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+        </dependency>
+
+        <!-- Jackson for JSON processing -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+        </dependency>
+
+        <!-- ZeroMQ for table monitoring -->
+        <dependency>
+            <groupId>org.zeromq</groupId>
+            <artifactId>jeromq</artifactId>
+        </dependency>
+
+        <!-- Logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-mock</artifactId>
-            <version>${nifi.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -108,48 +86,22 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-	        <groupId>log4j</groupId>
-	        <artifactId>log4j</artifactId>
-	        <version>1.2.17</version>
-	    </dependency>
-        <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>com.jayway.jsonpath</groupId>
-            <artifactId>json-path</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-csv</artifactId>
-            <version>1.4</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>1.3.2</version>
-        </dependency>        
-        <dependency>
-            <groupId>org.zeromq</groupId>
-            <artifactId>jeromq</artifactId>
-            <version>0.3.5</version>
-        </dependency>
-        <dependency>
-            <groupId>com.twitter</groupId>
-            <artifactId>hbc-core</artifactId>
-            <version>2.2.0</version>
-        </dependency>          
-        <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.google.code.gson</groupId>
-            <artifactId>gson</artifactId>
-            <version>2.2.4</version>
-            <type>jar</type>
-        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>
