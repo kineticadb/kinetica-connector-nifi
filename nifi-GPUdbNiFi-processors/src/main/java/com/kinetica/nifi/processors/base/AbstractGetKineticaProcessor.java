@@ -13,6 +13,7 @@ import org.apache.avro.generic.GenericRecord;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
@@ -54,6 +55,7 @@ public abstract class AbstractGetKineticaProcessor extends AbstractKineticaProce
             .description("URL of the Kinetica table monitor endpoint for ZeroMQ subscriptions. " +
                     "Example: tcp://172.3.4.19:9002")
             .required(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 

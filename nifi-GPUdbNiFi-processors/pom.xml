@@ -5,7 +5,7 @@
     <parent>
         <groupId>com.gpudb</groupId>
         <artifactId>GPUdbNiFiConnector</artifactId>
-        <version>7.2.0.0</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>nifi-GPUdbNiFi-processors</artifactId>

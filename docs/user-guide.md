@@ -1,7 +1,7 @@
 # Kinetica NiFi Connector User Guide
 
-**Version:** 7.2.0.0
-**Compatibility:** Apache NiFi 2.0.0+, Java 21+, Kinetica 7.2+
+**Version:** 7.2
+**Compatibility:** Apache NiFi 2.7.0+, Java 21+, Kinetica 7.2+
 
 ## Table of Contents
 
@@ -40,16 +40,17 @@ The Kinetica NiFi Connector provides a set of Apache NiFi processors for integra
 
 ### Key Features
 
-- Full NiFi 2.0.0 compatibility with Java 21
+- Full NiFi 2.7.0 compatibility with Java 21
 - SSL/TLS support for secure connections
 - Connection pooling for high throughput
 - Streaming mode for large result sets (100K+ records)
-- Automatic table creation from schema definitions
+- Automatic table creation from schema definitions or Avro schemas
 - Batch processing with configurable sizes
 - Retry logic with exponential backoff
 - Comprehensive error handling
 - Avro format support for data lake integration
 - Full support for DECIMAL and ARRAY column types
+- Configurable cluster discovery and failover behavior
 
 ---
 
@@ -57,7 +58,7 @@ The Kinetica NiFi Connector provides a set of Apache NiFi processors for integra
 
 | Component | Version |
 |-----------|---------|
-| Apache NiFi | 2.0.0 or later |
+| Apache NiFi | 2.7.0 or later |
 | Java | 21 or later |
 | Kinetica | 7.2 or later |
 | Maven | 3.8+ (for building) |
@@ -68,10 +69,10 @@ The Kinetica NiFi Connector provides a set of Apache NiFi processors for integra
 
 ### Option 1: Pre-built NAR File
 
-1. Download the NAR file: `nifi-GPUdbNiFi-nar-7.2.0.0.nar`
+1. Get the NAR file from the `dist/` directory: `nifi-GPUdbNiFi-nar-7.2.x.y.nar`
 2. Copy to NiFi's extensions directory:
    ```bash
-   cp nifi-GPUdbNiFi-nar-7.2.0.0.nar $NIFI_HOME/extensions/
+   cp dist/nifi-GPUdbNiFi-nar-7.2.x.y.nar $NIFI_HOME/extensions/
    ```
 3. Restart NiFi:
    ```bash
@@ -80,7 +81,8 @@ The Kinetica NiFi Connector provides a set of Apache NiFi processors for integra
 
 ### Option 2: Build from Source
 
-See [Building from Source](#building-from-source) below.
+See [Building from Source](#building-from-source) below. The NAR file is automatically
+copied to the `dist/` directory during the build.
 
 ---
 
@@ -102,11 +104,12 @@ cd kinetica-connector-nifi
 # Set Java 21
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 
-# Build the project
+# Build the project (NAR is automatically copied to dist/)
 mvn clean package -DskipTests
 
 # The NAR file will be in:
-# nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-7.2.0.0.nar
+# dist/nifi-GPUdbNiFi-nar-7.2.x.y.nar
+# (also available at nifi-GPUdbNiFi-nar/target/)
 ```
 
 ### Running Tests
@@ -154,8 +157,22 @@ All Kinetica processors share these connection properties:
 | Connection Timeout | No | 30 sec | Maximum connection wait time |
 | Socket Timeout | No | 60 sec | Maximum socket wait time |
 | Connection Pool Size | No | 4 | Number of pooled connections |
+| Disable Auto Discovery | No | false | Disable automatic cluster node discovery |
+| Disable Failover | No | false | Disable automatic failover to other nodes |
 
 *Not required for ListKineticaTables processor
+
+### Kinetica Head Node Configuration
+
+When connecting through a Kinetica head node, you may need to disable auto-discovery
+and failover to prevent the client from bypassing the head node:
+
+```
+Disable Auto Discovery: true
+Disable Failover: true
+```
+
+This ensures all connections go through your Kinetica head node endpoint.
 
 ### Expression Language Support
 
@@ -181,12 +198,16 @@ Each FlowFile's attributes are mapped to table columns by name.
 | Property | Required | Default | Description |
 |----------|----------|---------|-------------|
 | Batch Size | Yes | 500 | Records per batch |
-| Schema Definition | No | - | Table schema (required if table doesn't exist) |
+| Schema Definition | No | - | Table schema in pipe-delimited format |
+| Avro Schema | No | - | Table schema as Avro JSON (alternative to Schema Definition) |
 | Collection Name | No | - | Optional collection/schema |
 | Update on Existing PK | No | false | Update records with matching primary key |
 | Replicate Table | No | false | Create replicated table |
 | Date Format | No | - | Pattern for parsing dates (e.g., `yyyy/MM/dd HH:mm:ss`) |
 | Timezone | No | System | Timezone for date parsing (e.g., `UTC`, `EST`) |
+
+**Note**: If the table doesn't exist, either `Schema Definition` or `Avro Schema` must be
+provided. `Schema Definition` takes precedence if both are set.
 
 #### Relationships
 
@@ -589,6 +610,64 @@ id|Long|primary_key,event_time|Long|timestamp,message|String|data
 **With text search:**
 ```
 id|Long|primary_key,title|String|data|text_search,content|String|store_only|text_search
+```
+
+---
+
+## Avro Schema for Table Creation
+
+As an alternative to the pipe-delimited Schema Definition, you can use Avro JSON schemas
+to define table structure. This is useful when you already have Avro schemas from upstream
+systems like Kafka or data lakes.
+
+### Avro Schema Example
+
+```json
+{
+  "type": "record",
+  "name": "SensorData",
+  "fields": [
+    {"name": "sensor_id", "type": "string"},
+    {"name": "temperature", "type": "double"},
+    {"name": "timestamp", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "location", "type": ["null", "string"]}
+  ]
+}
+```
+
+### Avro to Kinetica Type Mapping
+
+| Avro Type | Logical Type | Kinetica Type | Column Property |
+|-----------|--------------|---------------|-----------------|
+| `int` | - | Integer | data |
+| `long` | - | Long | data |
+| `float` | - | Float | data |
+| `double` | - | Double | data |
+| `boolean` | - | Integer | data, int8 |
+| `string` | - | String | data |
+| `bytes` | - | ByteBuffer | data |
+| `long` | `timestamp-millis` | Long | data, timestamp |
+| `long` | `timestamp-micros` | Long | data, timestamp |
+| `int` | `date` | String | data, date |
+| `int` | `time-millis` | String | data, time |
+| `bytes` | `decimal` | String | data, decimal |
+
+### Nullable Fields
+
+Avro union types containing `null` are automatically marked as nullable in Kinetica:
+
+```json
+{"name": "optional_field", "type": ["null", "string"]}
+```
+
+This creates a nullable String column in Kinetica.
+
+### Complex Types
+
+Complex Avro types (arrays, maps, nested records) are stored as JSON strings in Kinetica:
+
+```json
+{"name": "tags", "type": {"type": "array", "items": "string"}}
 ```
 
 ---

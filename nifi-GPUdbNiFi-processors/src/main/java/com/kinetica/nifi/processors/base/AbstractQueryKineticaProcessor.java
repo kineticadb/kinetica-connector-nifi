@@ -63,7 +63,7 @@ public abstract class AbstractQueryKineticaProcessor extends AbstractKineticaPro
                     "Larger values improve throughput but use more memory.")
             .required(true)
             .defaultValue("10000")
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
             .build();
 
@@ -194,7 +194,13 @@ public abstract class AbstractQueryKineticaProcessor extends AbstractKineticaPro
         pageSize = context.getProperty(PROP_PAGE_SIZE).evaluateAttributeExpressions().asInteger();
         maxRecords = context.getProperty(PROP_MAX_RECORDS).asInteger();
         useStreaming = context.getProperty(PROP_USE_STREAMING).asBoolean();
-        pagingTableTtl = context.getProperty(PROP_PAGING_TABLE_TTL).asInteger();
+
+        // Only read paging table TTL when streaming mode is enabled (NiFi 2.7+ enforces dependsOn)
+        if (useStreaming) {
+            pagingTableTtl = context.getProperty(PROP_PAGING_TABLE_TTL).asInteger();
+        } else {
+            pagingTableTtl = 300; // Default value
+        }
 
         getLogger().info("Query processor configured: pageSize={}, maxRecords={}, streaming={}, pagingTTL={}",
                 pageSize, maxRecords, useStreaming, pagingTableTtl);

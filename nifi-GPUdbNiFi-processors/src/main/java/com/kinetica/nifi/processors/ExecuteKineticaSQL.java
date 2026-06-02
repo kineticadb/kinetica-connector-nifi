@@ -108,7 +108,7 @@ public class ExecuteKineticaSQL extends AbstractKineticaProcessor {
             .required(false)
             .defaultValue("300")
             .addValidator(StandardValidators.NON_NEGATIVE_INTEGER_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final PropertyDescriptor PROP_FAIL_ON_ERROR = new PropertyDescriptor.Builder()

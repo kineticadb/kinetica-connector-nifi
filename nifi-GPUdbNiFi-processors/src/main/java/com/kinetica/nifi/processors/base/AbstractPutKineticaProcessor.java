@@ -20,6 +20,7 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 
 import com.gpudb.BulkInserter;
+import com.gpudb.ColumnProperty;
 import com.gpudb.GPUdb;
 import com.gpudb.GPUdbException;
 import com.gpudb.Record;
@@ -29,6 +30,8 @@ import com.gpudb.Type.Column;
 import com.gpudb.protocol.CreateTableRequest;
 import com.gpudb.protocol.InsertRecordsRequest;
 import com.kinetica.nifi.processors.KineticaUtilities;
+
+import java.nio.ByteBuffer;
 
 /**
  * Abstract base class for Kinetica Put processors (PutKinetica, PutKineticaFromFile, etc.).
@@ -56,7 +59,7 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
             .displayName("Collection Name")
             .description("Name of the Kinetica collection (optional). Tables can be organized into collections.")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -67,7 +70,23 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
                     "Format: column1|type|annotations,column2|type|annotations,... " +
                     "Example: x|Float|data,y|Float|data,TIMESTAMP|Long|data,TEXT|String|store_only|text_search")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor PROP_AVRO_SCHEMA = new PropertyDescriptor.Builder()
+            .name("Avro Schema")
+            .displayName("Avro Schema")
+            .description("Avro schema JSON defining the Kinetica table structure. " +
+                    "This is an alternative to the pipe-delimited Schema Definition property. " +
+                    "Only applies if the table doesn't exist and the Schema Definition property is not set. " +
+                    "Avro types are mapped to Kinetica types: " +
+                    "int->Integer, long->Long, float->Float, double->Double, boolean->Integer, " +
+                    "string/bytes->String. Logical types: timestamp-millis->Long(timestamp), " +
+                    "date->Integer(date), decimal->Double. Nullable fields (union with null) " +
+                    "are marked as nullable in Kinetica.")
+            .required(false)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -76,10 +95,10 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
             .displayName("Batch Size")
             .description("Number of records to batch before flushing to Kinetica. " +
                     "Higher values improve throughput but use more memory. " +
-                    "Supports Expression Language (evaluated at processor startup).")
+                    "Supports Expression Language.")
             .required(true)
             .defaultValue("500")
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
             .build();
 
@@ -109,7 +128,7 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
             .displayName("Date Format")
             .description("Date format pattern for parsing datetime values. Example: yyyy/MM/dd HH:mm:ss")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -118,7 +137,7 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
             .displayName("Timezone")
             .description("Timezone for datetime values. If not set, the system default will be used. Example: EST, UTC")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -174,6 +193,7 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
         props.addAll(getBasePropertyDescriptors());
         props.add(PROP_COLLECTION);
         props.add(PROP_SCHEMA);
+        props.add(PROP_AVRO_SCHEMA);
         props.add(PROP_BATCH_SIZE);
         props.add(PROP_UPDATE_ON_EXISTING_PK);
         props.add(PROP_REPLICATE_TABLE);
@@ -230,6 +250,9 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
             } else if (context.getProperty(PROP_SCHEMA).isSet()) {
                 String schemaStr = context.getProperty(PROP_SCHEMA).evaluateAttributeExpressions().getValue();
                 objectType = createTable(context, schemaStr);
+            } else if (context.getProperty(PROP_AVRO_SCHEMA).isSet()) {
+                String avroSchemaJson = context.getProperty(PROP_AVRO_SCHEMA).evaluateAttributeExpressions().getValue();
+                objectType = createTableFromAvroSchema(context, avroSchemaJson);
             } else {
                 objectType = null;
                 getLogger().warn("Table '{}' does not exist and no schema provided", tableName);
@@ -400,6 +423,213 @@ public abstract class AbstractPutKineticaProcessor extends AbstractKineticaProce
             }
         }
         return -1;
+    }
+
+    // ========== AVRO SCHEMA PARSING ==========
+
+    /**
+     * Creates a new table in Kinetica based on the provided Avro schema JSON.
+     *
+     * <p>This method parses an Avro schema and creates a corresponding Kinetica table.
+     * Avro types are mapped to Kinetica types as follows:
+     * <ul>
+     *   <li>int -> Integer</li>
+     *   <li>long -> Long</li>
+     *   <li>float -> Float</li>
+     *   <li>double -> Double</li>
+     *   <li>boolean -> Integer (0 or 1)</li>
+     *   <li>string, bytes -> String</li>
+     *   <li>timestamp-millis (logical type) -> Long with timestamp annotation</li>
+     *   <li>date (logical type) -> Integer with date annotation</li>
+     *   <li>decimal (logical type) -> Double</li>
+     * </ul>
+     *
+     * <p>Nullable fields (union types containing "null") are marked as nullable in Kinetica.
+     *
+     * @param context The process context
+     * @param avroSchemaJson The Avro schema in JSON format
+     * @return The Type object representing the created table
+     * @throws GPUdbException if schema parsing or table creation fails
+     */
+    protected Type createTableFromAvroSchema(ProcessContext context, String avroSchemaJson) throws GPUdbException {
+        getLogger().info("Creating table '{}' from Avro schema", tableName);
+
+        // Check if table already exists
+        if (tableExists(tableName)) {
+            getLogger().debug("Table '{}' already exists, returning existing type", tableName);
+            return Type.fromTable(gpudb, tableName);
+        }
+
+        try {
+            // Parse Avro schema JSON
+            org.apache.avro.Schema avroSchema = new org.apache.avro.Schema.Parser().parse(avroSchemaJson);
+
+            // Validate that it's a record type
+            if (avroSchema.getType() != org.apache.avro.Schema.Type.RECORD) {
+                throw new GPUdbException("Avro schema must be a RECORD type, got: " + avroSchema.getType());
+            }
+
+            // Parse fields into Kinetica columns
+            List<Column> columns = parseAvroSchemaFields(avroSchema);
+            Type type = new Type("", columns);
+
+            // Create the type in Kinetica
+            String typeId = type.create(gpudb);
+
+            // Set up table creation options
+            String collection = context.getProperty(PROP_COLLECTION).evaluateAttributeExpressions().getValue();
+            if (collection == null) {
+                collection = "";
+            }
+
+            boolean replicated = context.getProperty(PROP_REPLICATE_TABLE).asBoolean();
+
+            Map<String, String> createOptions = GPUdb.options(
+                    CreateTableRequest.Options.COLLECTION_NAME, collection,
+                    CreateTableRequest.Options.IS_REPLICATED,
+                    replicated ? CreateTableRequest.Options.TRUE : CreateTableRequest.Options.FALSE
+            );
+
+            // Create the table
+            gpudb.createTable(tableName, typeId, createOptions);
+            gpudb.addKnownType(typeId, RecordObject.class);
+
+            getLogger().info("Successfully created table '{}' from Avro schema (replicated={})", tableName, replicated);
+            return type;
+
+        } catch (Exception e) {
+            if (e instanceof GPUdbException) {
+                throw (GPUdbException) e;
+            }
+            throw new GPUdbException("Failed to parse Avro schema: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Parses Avro schema fields into Kinetica Column objects.
+     *
+     * @param avroSchema The Avro schema to parse
+     * @return List of Column objects
+     * @throws GPUdbException if parsing fails
+     */
+    private List<Column> parseAvroSchemaFields(org.apache.avro.Schema avroSchema) throws GPUdbException {
+        List<Column> columns = new ArrayList<>();
+
+        for (org.apache.avro.Schema.Field field : avroSchema.getFields()) {
+            String fieldName = field.name();
+            org.apache.avro.Schema fieldSchema = field.schema();
+
+            // Check for nullable (union with null)
+            boolean isNullable = false;
+            org.apache.avro.Schema actualSchema = fieldSchema;
+
+            if (fieldSchema.getType() == org.apache.avro.Schema.Type.UNION) {
+                List<org.apache.avro.Schema> unionTypes = fieldSchema.getTypes();
+                for (org.apache.avro.Schema unionSchema : unionTypes) {
+                    if (unionSchema.getType() == org.apache.avro.Schema.Type.NULL) {
+                        isNullable = true;
+                    } else {
+                        actualSchema = unionSchema;
+                    }
+                }
+            }
+
+            // Detect logical type (check both getLogicalType() and getObjectProp())
+            String logicalTypeName = null;
+            if (actualSchema.getLogicalType() != null) {
+                logicalTypeName = actualSchema.getLogicalType().getName();
+            } else if (actualSchema.getObjectProp("logicalType") != null) {
+                logicalTypeName = actualSchema.getObjectProp("logicalType").toString();
+            }
+
+            // Map Avro type to Kinetica type and get column properties
+            Class<?> kineticaType;
+            List<String> properties = new ArrayList<>();
+            properties.add(ColumnProperty.DATA);
+
+            if (logicalTypeName != null) {
+                switch (logicalTypeName) {
+                    case "timestamp-millis":
+                    case "timestamp-micros":
+                        kineticaType = Long.class;
+                        properties.add(ColumnProperty.TIMESTAMP);
+                        break;
+                    case "date":
+                        kineticaType = String.class;
+                        properties.add(ColumnProperty.DATE);
+                        break;
+                    case "time-millis":
+                    case "time-micros":
+                        kineticaType = String.class;
+                        properties.add(ColumnProperty.TIME);
+                        break;
+                    case "decimal":
+                        kineticaType = String.class;
+                        properties.add(ColumnProperty.DECIMAL);
+                        break;
+                    default:
+                        // Unknown logical type - fall through to base type mapping
+                        kineticaType = mapAvroBaseTypeToKinetica(actualSchema, fieldName, properties);
+                        break;
+                }
+            } else {
+                kineticaType = mapAvroBaseTypeToKinetica(actualSchema, fieldName, properties);
+            }
+
+            if (isNullable) {
+                properties.add(ColumnProperty.NULLABLE);
+            }
+
+            columns.add(new Column(fieldName, kineticaType, properties));
+            getLogger().debug("Avro field '{}' -> Kinetica {} {}", fieldName, kineticaType.getSimpleName(), properties);
+        }
+
+        return columns;
+    }
+
+    /**
+     * Maps Avro base types to Kinetica Java types and adds appropriate column properties.
+     *
+     * @param schema The Avro schema for the field
+     * @param fieldName The field name (for error messages)
+     * @param properties List to add additional column properties to
+     * @return The Java class representing the Kinetica type
+     */
+    private Class<?> mapAvroBaseTypeToKinetica(org.apache.avro.Schema schema, String fieldName,
+                                                List<String> properties) {
+        switch (schema.getType()) {
+            case INT:
+                return Integer.class;
+            case LONG:
+                return Long.class;
+            case FLOAT:
+                return Float.class;
+            case DOUBLE:
+                return Double.class;
+            case BOOLEAN:
+                // Boolean maps to Integer with INT8 property in Kinetica
+                properties.add(ColumnProperty.INT8);
+                return Integer.class;
+            case STRING:
+            case ENUM:
+                return String.class;
+            case BYTES:
+            case FIXED:
+                return ByteBuffer.class;
+            case NULL:
+                return String.class;
+            case ARRAY:
+            case MAP:
+            case RECORD:
+                // Complex types are stored as JSON strings
+                getLogger().warn("Complex Avro type '{}' for field '{}' will be stored as String",
+                        schema.getType(), fieldName);
+                return String.class;
+            default:
+                getLogger().warn("Unsupported Avro type '{}' for field '{}', defaulting to String",
+                        schema.getType(), fieldName);
+                return String.class;
+        }
     }
 
     // ========== BULK INSERTER ==========

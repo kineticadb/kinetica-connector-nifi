@@ -211,5 +211,55 @@ public class AbstractKineticaProcessorTest {
         assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_CONNECTION_TIMEOUT));
         assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_SOCKET_TIMEOUT));
         assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_CONNECTION_POOL_SIZE));
+        // Should have cluster control properties
+        assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_DISABLE_AUTO_DISCOVERY));
+        assertTrue(processor.getSupportedPropertyDescriptors().contains(AbstractKineticaProcessor.PROP_DISABLE_FAILOVER));
+    }
+
+    // ========== Disable Auto Discovery Tests ==========
+
+    @Test
+    public void testDisableAutoDiscoveryProperty() {
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SERVER, "http://localhost:9191");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_TABLE, "test_table");
+
+        // Default (false) - should be valid
+        testRunner.assertValid();
+
+        // Explicitly enable auto discovery (default behavior)
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_DISABLE_AUTO_DISCOVERY, "false");
+        testRunner.assertValid();
+
+        // Disable auto discovery (useful with load balancers)
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_DISABLE_AUTO_DISCOVERY, "true");
+        testRunner.assertValid();
+    }
+
+    @Test
+    public void testDisableFailoverProperty() {
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SERVER, "http://localhost:9191");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_TABLE, "test_table");
+
+        // Default (false) - should be valid
+        testRunner.assertValid();
+
+        // Explicitly enable failover (default behavior)
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_DISABLE_FAILOVER, "false");
+        testRunner.assertValid();
+
+        // Disable failover (useful with load balancers)
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_DISABLE_FAILOVER, "true");
+        testRunner.assertValid();
+    }
+
+    @Test
+    public void testLoadBalancerConfiguration() {
+        // Typical load balancer configuration - disable both auto discovery and failover
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_SERVER, "http://loadbalancer.example.com:9191");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_TABLE, "test_table");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_DISABLE_AUTO_DISCOVERY, "true");
+        testRunner.setProperty(AbstractKineticaProcessor.PROP_DISABLE_FAILOVER, "true");
+
+        testRunner.assertValid();
     }
 }

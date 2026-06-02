@@ -7,7 +7,7 @@ The documentation can be found at http://www.kinetica.com/docs/7.2/index.html.
 For changes to the connector API, please refer to CHANGELOG.md.  For changes
 to Kinetica functions, please refer to CHANGELOG-FUNCTIONS.md.
 
-## Version 7.2.0.0
+## Version 7.2
 
 This version has been modernized for **NiFi 2.x** and **Java 21**.
 
@@ -67,14 +67,14 @@ must be available:
 mvn clean package -Dkinetica.url=http://<host>:<port> -Dkinetica.username=<user> -Dkinetica.password=<pass>
 ```
 
-The NAR file will be created at `nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-7.2.0.0.nar`
+The NAR file will be created at `nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-7.2.x.y.nar`
 
 ### Installing the Kinetica NiFi Connector into NiFi
 
 Copy the NAR file to your NiFi installation's `lib/` directory and restart NiFi:
 
 ```bash
-cp nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-7.2.0.0.nar $NIFI_HOME/lib/
+cp nifi-GPUdbNiFi-nar/target/nifi-GPUdbNiFi-nar-7.2.x.y.nar $NIFI_HOME/lib/
 ```
 
 -----

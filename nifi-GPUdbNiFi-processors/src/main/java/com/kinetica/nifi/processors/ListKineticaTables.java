@@ -78,7 +78,7 @@ public class ListKineticaTables extends AbstractKineticaProcessor {
                     "Can also use wildcards like 'my_schema.sales_*'.")
             .required(true)
             .defaultValue("*")
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 

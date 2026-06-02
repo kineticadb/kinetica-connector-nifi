@@ -5,7 +5,7 @@
     <parent>
         <groupId>com.gpudb</groupId>
         <artifactId>GPUdbNiFiConnector</artifactId>
-        <version>7.2.0.0</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>nifi-GPUdbNiFi-nar</artifactId>
@@ -28,6 +28,35 @@
                 <groupId>org.apache.nifi</groupId>
                 <artifactId>nifi-nar-maven-plugin</artifactId>
                 <extensions>true</extensions>
+            </plugin>
+            <!-- Copy NAR to dist/ directory for easy distribution -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-nar-to-dist</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.basedir}/../dist"/>
+                                <delete>
+                                	<fileset dir="${project.basedir}/../dist">
+                                		<include name="*.nar"/>
+                                	</fileset>
+                                </delete>
+                                <copy file="${project.build.directory}/${project.artifactId}-${project.version}.nar"
+                                      todir="${project.basedir}/../dist"
+                                      overwrite="true"/>
+                                <echo message="NAR copied to dist/${project.artifactId}-${project.version}.nar"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

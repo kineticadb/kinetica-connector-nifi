@@ -2,6 +2,21 @@
 
 ## Version 7.2
 
+### Version 7.2.0.1 - 2026-06-02
+
+#### Added
+-   Avro schema-driven table creation
+-   Disable auto-discovery & failover connection parameters
+-   Streaming/paging support for queries
+-   Pre-built NAR file under `dist`
+
+#### Changed
+-   Upgraded from NiFi 2.0.0 to NiFi 2.7.0
+-   Upgraded to Jackson 2.18.6
+-   Upgraded to Avro 1.11.4
+-   Common properties now configurable per-FlowFile
+
+
 ### Version 7.2.0.0 - 2026-05-31
 
 #### Added
@@ -35,12 +50,14 @@
 -   Null-safe utility methods
 
 
+
 ## Version 7.1
 
 ### Version 7.1.0.0 - 2020-07-27
 
 #### Changed
 -   Updated version to 7.1
+
 
 
 ## Version 7.0
@@ -51,11 +68,14 @@
 -   Updated the Kinetica Java API version to 7.0.3.0 to take advantage of
     recent changes (support for HA failover for multi-head I/O).
 
+
 ### Version 7.0.2.0 - 2019-04-12
 
 #### Changed
 -   Modified the PutKineticaFromFile processor to divert bad records/lines
     from CSV files to a failure relationship.
+
+
 
 ## Version 6.2
 
@@ -67,21 +87,25 @@
     -   Escape character
 
 
-## Version 6.1.0 - 2017-10-05
+
+## Version 6.1 - 2017-10-05
 
 -   Maintenance
 
 
-## Version 5.2.0 - 2016-06-25
+
+## Version 5.2 - 2016-06-25
 
 -   Maintenance.
 
 
-## Version 5.1.0 - 2016-05-06
+
+## Version 5.1 - 2016-05-06
 
 -   Updated pom.xml and imports for new GPUdb API structure.
 
 
-## Version 4.2.0 - 2016-04-11
+
+## Version 4.2 - 2016-04-11
 
 -   Initial version

@@ -97,7 +97,7 @@ public class PutKineticaRecord extends AbstractKineticaProcessor {
             .required(false)
             .defaultValue("10000")
             .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final PropertyDescriptor PROP_UPDATE_ON_EXISTING_PK = new PropertyDescriptor.Builder()

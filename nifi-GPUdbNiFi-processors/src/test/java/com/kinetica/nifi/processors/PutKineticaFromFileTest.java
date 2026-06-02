@@ -153,6 +153,10 @@ public class PutKineticaFromFileTest {
 
     @Test
     public void testNoInputDoesNothing() {
+        // Disable expression language scope validation for this test
+        // since onScheduled runs before any FlowFile is available
+        testRunner.setValidateExpressionUsage(false);
+
         testRunner.setProperty(PutKineticaFromFile.PROP_SERVER, "http://localhost:9191");
         testRunner.setProperty(PutKineticaFromFile.PROP_TABLE, "test_table");
         testRunner.setProperty(PutKineticaFromFile.PROP_USERNAME, "admin");

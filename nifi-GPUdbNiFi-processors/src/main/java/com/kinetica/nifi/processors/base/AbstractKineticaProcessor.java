@@ -56,7 +56,7 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
             .displayName("Server URL")
             .description("URL of the Kinetica server. Example: http://172.3.4.19:9191")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.URL_VALIDATOR)
             .build();
 
@@ -65,7 +65,7 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
             .displayName("Table Name")
             .description("Name of the Kinetica table. Can include schema prefix (e.g., 'schema.table_name').")
             .required(true)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -74,7 +74,7 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
             .displayName("Username")
             .description("Username for Kinetica authentication. Leave empty if authentication is not required.")
             .required(false)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -143,7 +143,31 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
             .required(false)
             .defaultValue("4")
             .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
+            .build();
+
+    public static final PropertyDescriptor PROP_DISABLE_AUTO_DISCOVERY = new PropertyDescriptor.Builder()
+            .name("Disable Auto Discovery")
+            .displayName("Disable Auto Discovery")
+            .description("If true, disables automatic discovery of Kinetica cluster nodes. " +
+                    "This is useful when connecting through a load balancer or proxy " +
+                    "where direct node discovery may not be appropriate.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor PROP_DISABLE_FAILOVER = new PropertyDescriptor.Builder()
+            .name("Disable Failover")
+            .displayName("Disable Failover")
+            .description("If true, disables automatic failover to other cluster nodes. " +
+                    "This is useful when a single endpoint is preferred, such as " +
+                    "when using a load balancer that handles failover externally.")
+            .required(false)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
             .build();
 
     // ========== TABLE NAME VALIDATION ==========
@@ -173,6 +197,8 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
     protected volatile int connectionTimeout;
     protected volatile int socketTimeout;
     protected volatile int connectionPoolSize;
+    protected volatile boolean disableAutoDiscovery;
+    protected volatile boolean disableFailover;
 
     // Connection pool for reuse across FlowFiles with different attribute values
     private final Map<String, GPUdb> connectionPool = new ConcurrentHashMap<>();
@@ -197,6 +223,8 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
         descriptors.add(PROP_CONNECTION_TIMEOUT);
         descriptors.add(PROP_SOCKET_TIMEOUT);
         descriptors.add(PROP_CONNECTION_POOL_SIZE);
+        descriptors.add(PROP_DISABLE_AUTO_DISCOVERY);
+        descriptors.add(PROP_DISABLE_FAILOVER);
         return descriptors;
     }
 
@@ -226,6 +254,8 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
             socketTimeout = (int) context.getProperty(PROP_SOCKET_TIMEOUT)
                     .asTimePeriod(TimeUnit.MILLISECONDS).longValue();
             connectionPoolSize = context.getProperty(PROP_CONNECTION_POOL_SIZE).asInteger();
+            disableAutoDiscovery = context.getProperty(PROP_DISABLE_AUTO_DISCOVERY).asBoolean();
+            disableFailover = context.getProperty(PROP_DISABLE_FAILOVER).asBoolean();
 
             // Create GPUdb connection
             gpudb = createGPUdbConnection(context);
@@ -351,8 +381,21 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
         // Configure thread pool size for multi-head operations
         options.setThreadCount(connectionPoolSize);
 
-        getLogger().debug("Creating GPUdb connection: URL={}, SSL={}, Timeout={}ms, Threads={}",
-                serverUrl, useSSL, connectionTimeout, connectionPoolSize);
+        // Configure auto-discovery and failover options
+        if (disableAutoDiscovery) {
+            options.setDisableAutoDiscovery(true);
+            getLogger().info("Auto-discovery of cluster nodes is disabled");
+        }
+
+        if (disableFailover) {
+            options.setDisableFailover(true);
+            getLogger().info("Automatic failover is disabled");
+        }
+
+        getLogger().debug("Creating GPUdb connection: URL={}, SSL={}, Timeout={}ms, Threads={}, " +
+                        "AutoDiscovery={}, Failover={}",
+                serverUrl, useSSL, connectionTimeout, connectionPoolSize,
+                !disableAutoDiscovery, !disableFailover);
 
         return new GPUdb(serverUrl, options);
     }
