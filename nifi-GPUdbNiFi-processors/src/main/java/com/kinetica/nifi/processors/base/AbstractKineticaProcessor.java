@@ -49,6 +49,35 @@ import com.gpudb.WorkerList;
  */
 public abstract class AbstractKineticaProcessor extends AbstractProcessor {
 
+    // ========== CLIENT IDENTIFICATION ==========
+
+    /** Client name reported to Kinetica on every connection. */
+    private static final String CLIENT_NAME = "kinetica-nifi";
+
+    /**
+     * Connector version reported to Kinetica, loaded once from the build-filtered
+     * {@code kinetica-nifi-version.properties} resource. Falls back to "unknown"
+     * if the resource is missing (e.g. running from unfiltered classes).
+     */
+    private static final String CLIENT_VERSION = loadClientVersion();
+
+    private static String loadClientVersion() {
+        try (java.io.InputStream in = AbstractKineticaProcessor.class
+                .getResourceAsStream("/kinetica-nifi-version.properties")) {
+            if (in != null) {
+                java.util.Properties props = new java.util.Properties();
+                props.load(in);
+                String version = props.getProperty("version");
+                if (version != null && !version.isEmpty() && !version.startsWith("${")) {
+                    return version;
+                }
+            }
+        } catch (java.io.IOException e) {
+            // Fall through to the default below.
+        }
+        return "unknown";
+    }
+
     // ========== COMMON PROPERTY DESCRIPTORS ==========
 
     public static final PropertyDescriptor PROP_SERVER = new PropertyDescriptor.Builder()
@@ -362,6 +391,9 @@ public abstract class AbstractKineticaProcessor extends AbstractProcessor {
     private GPUdb createGPUdbConnectionWithOptions(String serverUrl, String username, String password)
             throws GPUdbException {
         Options options = new Options();
+
+        // Identify this connector to the Kinetica server
+        options.setClientInfo(CLIENT_NAME, CLIENT_VERSION);
 
         // Configure authentication if credentials are provided
         if (username != null && !username.isEmpty() && password != null && !password.isEmpty()) {

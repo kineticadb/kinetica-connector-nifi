@@ -93,6 +93,24 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- Filter only the version properties file so ${project.version} is
+                 baked in at build time; leave all other resources untouched. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>kinetica-nifi-version.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>kinetica-nifi-version.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

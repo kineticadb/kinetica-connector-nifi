@@ -2,6 +2,12 @@
 
 ## Version 7.2
 
+### Version 7.2.0.2 - 2026-06-18
+
+#### Added
+-   Passing of connector name & version in HTTP User-Agent header.
+
+
 ### Version 7.2.0.1 - 2026-06-02
 
 #### Added

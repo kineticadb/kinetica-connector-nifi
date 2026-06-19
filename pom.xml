@@ -13,7 +13,7 @@
     <properties>
         <!-- Single source of truth for the project version (CI-Friendly Versions).
              Keep in sync with the VERSION file. -->
-        <revision>7.2.0.1</revision>
+        <revision>7.2.0.2</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!-- Java 21 required for NiFi 2.x -->
